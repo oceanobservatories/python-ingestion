@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Usage: python ingest.py send <ingestion-parameters>.csv
+# CSV File Usage: python ingest.py from_csv <ingestion-parameters>.csv
 
 import csv
 import datetime
