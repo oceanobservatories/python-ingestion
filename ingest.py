@@ -41,7 +41,7 @@ except subprocess.CalledProcessError as e:
     logger.error(
         "There was a problem starting the EDEX server (Error code %s)" % e.returncode)
 except Exception:
-    logger.exception(r
+    logger.exception(
         "A system error occurred when starting the EDEX server.")
 else:
     logger.info(
