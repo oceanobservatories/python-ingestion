@@ -66,7 +66,7 @@ class Ingest(object):
         for data_file in data_files:
             try:
                 # Attempt to send the file to UFrame's ingest sender.
-                c = subprocess.check_output([
+                subprocess.check_output([
                     INGESTION['sender'], uframe_route, data_file, reference_designator, data_source
                     ])
             except subprocess.CalledProcessError as e:
@@ -83,7 +83,6 @@ class Ingest(object):
                 logger.info(
                     "%s submitted to UFrame for ingestion (%s, %s, %s)." % (
                         data_file, uframe_route, reference_designator, data_source))
-                return c
         time.sleep(SLEEP_TIMER)
 
     def from_csv(self, args=None):
