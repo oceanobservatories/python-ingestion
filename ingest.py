@@ -51,7 +51,7 @@ class Ingest(object):
     ''' A helper class designed to handle the ingestion process.'''
 
     # A list of methods on the Ingest class that are valid ingestion tasks.
-    valid_tasks = ('send', ) 
+    valid_tasks = ('from_csv', ) 
 
     @classmethod
     def _ingest_sender(cls, filename_mask, uframe_route, reference_designator, data_source):
@@ -86,7 +86,7 @@ class Ingest(object):
                 return c
         time.sleep(SLEEP_TIMER)
 
-    def send(self, args=None):
+    def from_csv(self, args=None):
         ''' Reads the specified CSV file for mask, route, designator, and source parameters and 
             calls the ingest sender method with the appropriate parameters. '''
         if not args:
