@@ -21,7 +21,7 @@ EDEX_LOG_FILES = glob.glob("%s%s" % (EDEX['log_path'], "edex-ooi*.log"))
 # Set up some basic logging.
 logging.basicConfig(level=logging.INFO)
 handler = logging.FileHandler(
-    INGESTION['log_path'] + '/' + 'logfile.log'
+    INGESTION['log_path'] + '/' + 'ingestion.log'
     )
 handler.setLevel(logging.INFO)
 handler.setFormatter(
@@ -100,6 +100,12 @@ class Ingest(object):
                 'data_source': source,
                 }
 
+        # If no files are found, consider the entire filename mask a failure and track it.
+        if len(data_files) == 0:
+            failed_ingestions.append(
+                track_failure(filename_mask, uframe_route, reference_designator, data_source))
+            return failed_ingestions
+
         # Ingest each file in the file list.
         for data_file in data_files:
             ingestion_command = (
@@ -108,7 +114,7 @@ class Ingest(object):
             try:
                 # Attempt to send the file to UFrame's ingest sender.
                 if test_mode:
-                    sys.stdout.write(" ".join(ingestion_command))
+                    logger.info("TEST MODE: %s" % " ".join(ingestion_command))
                 else:
                     subprocess.check_output(ingestion_command)
             except subprocess.CalledProcessError as e:
@@ -128,7 +134,8 @@ class Ingest(object):
                 # If the ingest sender returns without any error code, consider a success and log it.
                 if test_mode:
                     logger.info(
-                        "Test: %s" % " ".join(ingestion_command))
+                        "TEST MODE: %s submitted to UFrame for ingestion (%s, %s, %s)." % (
+                            data_file, uframe_route, reference_designator, data_source))
                 else:
                     logger.info(
                         "%s submitted to UFrame for ingestion (%s, %s, %s)." % (
@@ -162,7 +169,7 @@ class Ingest(object):
 
         # Start the EDEX server.
         if not test_mode:
-            self.__class__._start_edex()
+            self.__class__._start_edex(fake=EDEX['fake'])
 
         # Run ingestions for each row in the CSV, keeping track of any failures.
         failed = []
@@ -172,6 +179,18 @@ class Ingest(object):
                 row['uframe_route'], row['reference_designator'], row['data_source'],
                 test_mode, sleep_timer,
                 )
+
+        # Write any failed ingestions out into a CSV file that can be re-ingested later.
+        if failed:
+            date_string = datetime.datetime.today().strftime('%Y_%m_%d_%H_%M_%S')
+            outfile = INGESTION["failed_path"] + "/" + "failed_ingestions_" + date_string + '.csv'
+            logger.info(
+                "Writing %s failed ingestion(s) out to %s" % (len(failed), outfile))
+            writer = csv.DictWriter(open(outfile, 'wb'), delimiter=',', fieldnames=fieldnames)
+            writer.writerow(dict((fn,fn) for fn in fieldnames))
+            for f in failed:
+                writer.writerow(f)
+        return
 
 if __name__ == '__main__':
     perform = Ingest()
