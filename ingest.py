@@ -137,9 +137,7 @@ class Ingestor(object):
 
     def send(self, filename_mask, uframe_route, reference_designator, data_source):
         ''' A helper method that finds the files that match the provided filename mask and calls 
-            UFrame's ingest sender application with the appropriate command-line arguments. 
-            This function will return a list of ingestions that failed. A blank list indicates 
-            success.'''
+            UFrame's ingest sender application with the appropriate command-line arguments. '''
 
         # Define some helper methods.
         def annotate_parameters(file, route, designator, source):
