@@ -62,7 +62,8 @@ class Task(object):
         self.args = args
 
     def dummy(self):
-        ''' A dummy task that doesn't do anything except log that it was run.'''
+        ''' A dummy task that doesn't do anything except create an Ingestor.'''
+        ingest = Ingestor(self.options)
         logger.info("Dummy task was run.")
 
     def from_csv(self):
@@ -78,8 +79,7 @@ class Task(object):
         # Create an instance of the Ingestor class with common options set.
         ingest = Ingestor(self.options)
 
-        # Source the EDEX environment and run the ingestion from the CSV file.
-        ingest.start_edex()
+        # Start the EDEX services and run the ingestion from the CSV file.
         ingest.from_csv(csv_file)
 
         # Write out any failed ingestions to a new CSV file.
@@ -103,8 +103,7 @@ class Task(object):
         with open(csv_batch, 'r') as f:
             csv_files = [x.strip() for x in f.readlines() if x.strip()]
 
-        # Source the EDEX environment and ingest from each CSV file.
-        ingest.start_edex()
+        # Start the EDEX services and ingest from each CSV file.
         for csv_file in csv_files:
             ingest.from_csv(csv_file)
 
@@ -114,19 +113,12 @@ class Task(object):
                 csv_batch.split("/")[-1].split(".")[0] + "_batch")
         return True
 
-class Ingestor(object):
-    ''' A helper class designed to handle the ingestion process.'''
-
+class ServiceManager(object):
     def __init__(self, options):
-        self.test_mode = options.pop('test_mode', False)
-        self.force_mode = options.pop('force_mode', False)
-        self.sleep_timer = options.pop('sleep_timer', SLEEP_TIMER)
-        self.failed_ingestions = []
+        self.test_mode = options.get('test_mode', False)
+        self.edex_command = options.get('edex_command', EDEX['command'])
 
-    def start_edex(self):
-        ''' Starts the EDEX server. The keyword argument 'test_mode' is used to bypass actually 
-            starting the EDEX server for testing purposes. '''
-        
+        # Source the EDEX server environment.
         if self.test_mode or EDEX['test_mode']:
             logger.info("TEST MODE: Sourcing the EDEX server environment.")
             logger.info("TEST MODE: EDEX server environment sourced.")
@@ -135,7 +127,7 @@ class Ingestor(object):
         # Source the EDEX environment.
         try:
             logger.info("Sourcing the EDEX server environment.")
-            run_edex = subprocess.check_output(['source', EDEX['command']])
+            subprocess.check_output(['source', self.edex_command])
         except Exception:
             logger.exception(
                 "An error occurred when sourcing the EDEX server environment.")
@@ -143,8 +135,71 @@ class Ingestor(object):
         else:
             logger.info("EDEX server environment sourced.")
 
-        # Insert code for starting the EDEX server here.
-        return True
+    def start(self):
+        logger.info("Starting all services.")
+        start_command = [self.edex_command, "all", "start"]
+        try:
+            if self.test_mode:
+                logger.info("TEST MODE: %s" % start_command)
+            else:
+                subprocess.check_output(start_command)
+        except Exception:
+            logger.exception(
+                "An error occurred when starting the system services.")
+            sys.exit(4)
+        else:
+            logger.info("Checking service statuses and refreshing process IDs.")
+            self.refresh_status()
+            logger.info("Services started")
+
+    def restart(self, stale_process_ids):
+        self.kill(stale_process_ids)
+        self.start()
+
+    def kill(stale_process_ids):
+        for pid in stale_process_ids.itervalues():
+            pass
+
+    def refresh_status(self):
+        self.process_ids = {}
+        try:
+            if self.test_mode:
+                status = "edex_ooi:   632\npostgres:   732\nqpidd:   845\npypies: 948 7803 7943 7944 7945 8037 8142 8143 8144\n"
+            else:
+                status = subprocess.check_output([self.edex_command, "all", "status"])
+        except Exception:
+            logger.exception(
+                "An error occurred when checking the service statuses.")
+            sys.exit(4)
+        else:
+            status = [s.strip() for s in status.split('\n') if s.strip()]
+            for s in status:
+                name, value = s.split(":")
+                value = value.strip().split(" ")
+                if len(value) == 1:
+                    value = value[0]
+                self.process_ids[name] = value
+            self.process_ids['edex_wrapper'] = shell.pgrep("-P", self.process_ids["edex_ooi"])[1]
+            if self.test_mode:
+                self.process_ids['edex_wrapper'], self.process_ids['edex_server'] = "test", "test"
+            else:
+                if self.process_ids['edex_wrapper']:
+                    self.process_ids['edex_server'] = shell.pgrep("-P", self.process_ids["edex_wrapper"])[1]
+                else:
+                    self.process_ids['edex_server'] = None
+        return all(self.process_ids.itervalues())
+
+class Ingestor(object):
+    ''' A helper class designed to handle the ingestion process.'''
+
+    def __init__(self, options, service_manager=None):
+        self.service_manager = service_manager or ServiceManager(options)
+        self.service_manager.start()
+
+        self.test_mode = options.get('test_mode', False)
+        self.force_mode = options.get('force_mode', False)
+        self.sleep_timer = options.get('sleep_timer', SLEEP_TIMER)
+        self.failed_ingestions = []
 
     def send(self, filename_mask, uframe_route, reference_designator, data_source):
         ''' A helper method that finds the files that match the provided filename mask and calls 
@@ -174,7 +229,21 @@ class Ingestor(object):
             return False
 
         # Ingest each file in the file list.
+        previous_data_file = ""
         for data_file in data_files:
+            # Check if the EDEX services are still running. If not, attempt to restart them.
+            while True:
+                stale_process_ids = self.service_manager.process_ids
+                if self.service_manager.refresh_status():
+                    break
+                logger.warn((
+                    "One or more EDEX services crashed after ingesting the previous data file "
+                    "(%s). Attempting to restart services." % previous_data_file
+                    ))
+                self.service_manager.restart(stale_process_ids)
+
+            # Check if the data_file has previously been ingested. If it has, then skip it, unless 
+            # force mode (-f) is active.
             if in_edex_log(data_file):
                 if self.force_mode:
                     logger.warning((
@@ -211,6 +280,7 @@ class Ingestor(object):
             else:
                 # If there are no errors, consider the ingest send a success and log it.
                 logger.info(ingestion_command_string)
+            previous_data_file = data_file
         time.sleep(self.sleep_timer)
         return True
 
