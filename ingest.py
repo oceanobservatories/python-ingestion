@@ -8,14 +8,17 @@ This script returns error codes at various points-of-failure:
 
 import csv
 import datetime
-import glob
 import logging
 import subprocess
 import sys
 import time
 from config import SLEEP_TIMER, UFRAME, EDEX
+from whelk import shell
+from glob import glob
 
-EDEX_LOG_FILES = glob.glob("%s%s" % (EDEX['log_path'], "edex-ooi*.log"))
+
+EDEX_LOG_FILES = glob("%s%s" % (EDEX['log_path'], "edex-ooi*.log"))
+EDEX_LOG_FILES += glob("%s%s" % (EDEX['log_path'], "*.zip"))
 
 # Set up some basic logging.
 logging.basicConfig(level=logging.INFO)
@@ -33,7 +36,11 @@ class Task(object):
     ''' A helper class designed to manage the different types of ingestion tasks.'''
 
     # A list of methods on the Task class that are valid ingestion tasks.
-    valid_tasks = ('from_csv', 'from_csv_batch',) 
+    valid_tasks = (
+        'dummy',            # A dummy task. Doesn't do anything.
+        'from_csv',         # Ingest from a single CSV file.
+        'from_csv_batch',   # Ingest from multiple CSV files defined in a batch.
+        ) 
 
     def __init__(self, args):
         ''' Parse and interpret common command-line options.'''
@@ -53,6 +60,10 @@ class Task(object):
             'sleep_timer': sleep_timer,
             }
         self.args = args
+
+    def dummy(self):
+        ''' A dummy task that doesn't do anything except log that it was run.'''
+        logger.info("Dummy task was run.")
 
     def from_csv(self):
         ''' Ingest data mapped out by a single CSV file. '''
@@ -150,10 +161,10 @@ class Ingestor(object):
                 }
         def in_edex_log(datafile):
             ''' Check EDEX logs to see if the file has been ingested by EDEX.'''
-            return False
+            return bool(shell.zgrep(datafile, *EDEX_LOG_FILES))
 
         # Get a list of files that match the file mask and log the list size.
-        data_files = glob.glob(filename_mask)
+        data_files = glob(filename_mask)
         logger.info("%s file(s) found for %s" % (len(data_files), filename_mask))
 
         # If no files are found, consider the entire filename mask a failure and track it.
