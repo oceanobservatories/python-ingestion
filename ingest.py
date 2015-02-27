@@ -329,7 +329,7 @@ class Ingestor(object):
                 # If there are no errors, consider the ingest send a success and log it.
                 logger.info(ingestion_command_string)
             previous_data_file = data_file
-        sleep(self.sleep_timer)
+            sleep(self.sleep_timer)
         return True
 
     def from_csv(self, csv_file):
