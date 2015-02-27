@@ -33,6 +33,18 @@ logger = logging.getLogger(__name__)
 logger.addHandler(handler)
 logger.propagate = False
 
+def source(script, update=True):
+    """
+    http://pythonwise.blogspot.fr/2010/04/sourcing-shell-script.html (Miki Tebeka)
+    """
+    import subprocess, os
+    proc = subprocess.Popen(". %s; env -0" % script, stdout=subprocess.PIPE, shell=True)
+    output = proc.communicate()[0]
+    env = dict((line.split("=", 1) for line in output.split('\x00') if line))
+    if update:
+        os.environ.update(env)
+    return env
+
 class Task(object):
     ''' A helper class designed to manage the different types of ingestion tasks.'''
 
@@ -131,7 +143,7 @@ class ServiceManager(object):
         # Source the EDEX environment.
         try:
             logger.info("Sourcing the EDEX server environment.")
-            subprocess.check_output(['source', self.edex_command])
+            source(self.edex_command)
         except Exception:
             logger.exception(
                 "An error occurred when sourcing the EDEX server environment.")
