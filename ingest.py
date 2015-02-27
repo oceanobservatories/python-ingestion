@@ -215,9 +215,9 @@ class ServiceManager(object):
             if self.test_mode:
                 self.process_ids['edex_wrapper'], self.process_ids['edex_server'] = "test", "test"
             else:
-                self.process_ids['edex_wrapper'] = shell.pgrep("-P", self.process_ids["edex_ooi"])[1]
+                self.process_ids['edex_wrapper'] = shell.pgrep("-P", self.process_ids["edex_ooi"])[1].split('\n')[0]
                 if self.process_ids['edex_wrapper']:
-                    self.process_ids['edex_server'] = shell.pgrep("-P", self.process_ids["edex_wrapper"])[1]
+                    self.process_ids['edex_server'] = shell.pgrep("-P", self.process_ids["edex_wrapper"])[1].split('\n')[0]
                 else:
                     self.process_ids['edex_server'] = None
         return all(self.process_ids.itervalues())
