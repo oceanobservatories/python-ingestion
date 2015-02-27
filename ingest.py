@@ -11,13 +11,13 @@ import datetime
 import logging
 import subprocess
 import sys
-import time
+from time import sleep
 from config import SLEEP_TIMER, UFRAME, EDEX
 from whelk import shell
 from glob import glob
 
-
-EDEX_LOG_FILES = glob("%s%s" % (EDEX['log_path'], "edex-ooi*.log"))
+EDEX_LOG_FILES  = glob("%s%s" % (EDEX['log_path'], "edex-ooi*.log"))
+EDEX_LOG_FILES += glob("%s%s" % (EDEX['log_path'], "edex-ooi*.log.[0-9]*"))
 EDEX_LOG_FILES += glob("%s%s" % (EDEX['log_path'], "*.zip"))
 
 # Set up some basic logging.
@@ -31,6 +31,7 @@ handler.setFormatter(
     )
 logger = logging.getLogger(__name__)
 logger.addHandler(handler)
+logger.propagate = False
 
 class Task(object):
     ''' A helper class designed to manage the different types of ingestion tasks.'''
@@ -63,7 +64,7 @@ class Task(object):
 
     def dummy(self):
         ''' A dummy task that doesn't do anything except create an Ingestor.'''
-        ingest = Ingestor(self.options)
+        ingest = Ingestor(**self.options)
         logger.info("Dummy task was run.")
 
     def from_csv(self):
@@ -77,7 +78,7 @@ class Task(object):
             return False
 
         # Create an instance of the Ingestor class with common options set.
-        ingest = Ingestor(self.options)
+        ingest = Ingestor(**self.options)
 
         # Start the EDEX services and run the ingestion from the CSV file.
         ingest.from_csv(csv_file)
@@ -92,7 +93,7 @@ class Task(object):
         ''' Ingest data mapped out by multiple CSV files, defined in a single .csv.batch file.'''
 
         # Create an instance of the Ingestor class with common options set.
-        ingest = Ingestor(self.options)
+        ingest = Ingestor(**self.options)
 
         # Open the batch list file and parse the csv paths into a list
         try:
@@ -114,9 +115,12 @@ class Task(object):
         return True
 
 class ServiceManager(object):
-    def __init__(self, options):
+    ''' A helper class that manages the services that the ingestion depends on.'''
+
+    def __init__(self, **options):
         self.test_mode = options.get('test_mode', False)
         self.edex_command = options.get('edex_command', EDEX['command'])
+        self.cooldown = options.get('cooldown', EDEX['cooldown'])
 
         # Source the EDEX server environment.
         if self.test_mode or EDEX['test_mode']:
@@ -135,32 +139,58 @@ class ServiceManager(object):
         else:
             logger.info("EDEX server environment sourced.")
 
-    def start(self):
-        logger.info("Starting all services.")
-        start_command = [self.edex_command, "all", "start"]
+    def action(self, action):
+        ''' Starts or stops all services. '''
+        verbose_action = {'start': 'start', 'stop': 'stopp'}[action]
+        
+        # Check if the action is valid.
+        if action not in ("start", "stop"):
+            logger.error("% is not a valid action" % action.title())
+            sys.exit(4)
+
+        logger.info("%sing all services." % verbose_action.title())
+        command = [self.edex_command, "all", action]
+        command_string = " ".join(command)
         try:
             if self.test_mode:
-                logger.info("TEST MODE: %s" % start_command)
+                logger.info("TEST MODE: " + command_string)
             else:
-                subprocess.check_output(start_command)
+                logger.info(command_string)
+                subprocess.check_output(command)
         except Exception:
             logger.exception(
-                "An error occurred when starting the system services.")
+                "An error occurred when %sing services." % verbose_action)
             sys.exit(4)
         else:
-            logger.info("Checking service statuses and refreshing process IDs.")
-            self.refresh_status()
-            logger.info("Services started")
+            ''' When EDEX is started, it takes some time for the service to be ready. A cooldown 
+                setting from the config file specifies how long to wait before continuing the 
+                script.'''
+            if action == "start":
+                logger.info("Waiting specified cooldown time (%s seconds)" % self.cooldown)
+                sleep(self.cooldown)
 
-    def restart(self, stale_process_ids):
-        self.kill(stale_process_ids)
-        self.start()
+            # Check to see if all processes were started or stopped, and exit if there's an issue.
+            logger.info("Checking service statuses and refreshing process IDs.")
+            if self.refresh_status() == {'start': True, 'stop': False}[action]:
+                logger.info("All services %sed." % verbose_action)
+            else:
+                logger.error("There was an issue %sing the services." % verbose_action)
+                logger.error(self.process_ids)
+                sys.exit(4)
+
+    def restart(self):
+        ''' Restart all services.'''
+        self.action("stop")
+        self.action("start")
 
     def kill(stale_process_ids):
         for pid in stale_process_ids.itervalues():
             pass
 
     def refresh_status(self):
+        ''' Run the edex-server script's status command to get and store process IDs for all 
+            services, as well as determine the actual PID for the EDEX application.
+            Returns True if all services have PIDs, and False if any one service doesn't. '''
         self.process_ids = {}
         try:
             if self.test_mode:
@@ -172,6 +202,7 @@ class ServiceManager(object):
                 "An error occurred when checking the service statuses.")
             sys.exit(4)
         else:
+            # Parse and process the output of 'edex-server all status' into a dict.
             status = [s.strip() for s in status.split('\n') if s.strip()]
             for s in status:
                 name, value = s.split(":")
@@ -179,10 +210,12 @@ class ServiceManager(object):
                 if len(value) == 1:
                     value = value[0]
                 self.process_ids[name] = value
-            self.process_ids['edex_wrapper'] = shell.pgrep("-P", self.process_ids["edex_ooi"])[1]
+
+            # Determine the child processes for edex_ooi to get the actual PID of the EDEX application.
             if self.test_mode:
                 self.process_ids['edex_wrapper'], self.process_ids['edex_server'] = "test", "test"
             else:
+                self.process_ids['edex_wrapper'] = shell.pgrep("-P", self.process_ids["edex_ooi"])[1]
                 if self.process_ids['edex_wrapper']:
                     self.process_ids['edex_server'] = shell.pgrep("-P", self.process_ids["edex_wrapper"])[1]
                 else:
@@ -192,18 +225,21 @@ class ServiceManager(object):
 class Ingestor(object):
     ''' A helper class designed to handle the ingestion process.'''
 
-    def __init__(self, options, service_manager=None):
-        self.service_manager = service_manager or ServiceManager(options)
-        self.service_manager.start()
-
+    def __init__(self, **options):
         self.test_mode = options.get('test_mode', False)
         self.force_mode = options.get('force_mode', False)
         self.sleep_timer = options.get('sleep_timer', SLEEP_TIMER)
         self.failed_ingestions = []
 
+        ''' Instantiate a ServiceManager for this Ingestor object and start the services if any are
+            not running. '''
+        self.service_manager = options.get('service_manager', ServiceManager(**options))
+        if not self.service_manager.refresh_status():
+            self.service_manager.action("start")
+
     def send(self, filename_mask, uframe_route, reference_designator, data_source):
-        ''' A helper method that finds the files that match the provided filename mask and calls 
-            UFrame's ingest sender application with the appropriate command-line arguments. '''
+        ''' Finds the files that match the provided filename mask and calls UFrame's ingest sender 
+            application with the appropriate command-line arguments. '''
 
         # Define some helper methods.
         def annotate_parameters(file, route, designator, source):
@@ -281,7 +317,7 @@ class Ingestor(object):
                 # If there are no errors, consider the ingest send a success and log it.
                 logger.info(ingestion_command_string)
             previous_data_file = data_file
-        time.sleep(self.sleep_timer)
+        sleep(self.sleep_timer)
         return True
 
     def from_csv(self, csv_file):
@@ -300,12 +336,7 @@ class Ingestor(object):
 
         # Run ingestions for each row in the CSV, keeping track of any failures.
         for row in reader:
-            self.send(
-                row['filename_mask'],
-                row['uframe_route'], 
-                row['reference_designator'], 
-                row['data_source'],
-                )
+            self.send(**row)
         logger.info(
             "Ingestion task from_csv for %s completed with %s failure(s)." % (
                 csv_file, len(self.failed_ingestions)))
@@ -331,6 +362,7 @@ if __name__ == '__main__':
     task, args = sys.argv[1], sys.argv[2:]
     perform = Task(args)
     if task in Task.valid_tasks:
+        logger.info("-")
         logger.info(
             "Running ingestion task '%s' with command-line arguments '%s'" % (
                 task, " ".join(args)))
