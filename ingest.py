@@ -264,7 +264,7 @@ class Ingestor(object):
                 }
         def in_edex_log(datafile):
             ''' Check EDEX logs to see if the file has been ingested by EDEX.'''
-            return bool(shell.zgrep(datafile, *EDEX_LOG_FILES))
+            return bool(shell.zgrep(datafile, *EDEX_LOG_FILES)[1])
 
         # Get a list of files that match the file mask and log the list size.
         data_files = glob(filename_mask)
