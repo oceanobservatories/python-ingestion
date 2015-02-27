@@ -23,7 +23,7 @@ EDEX_LOG_FILES += glob("%s%s" % (EDEX['log_path'], "*.zip"))
 # Set up some basic logging.
 logging.basicConfig(level=logging.INFO)
 handler = logging.FileHandler(
-    UFRAME['log_path'] + '/' + 'ingestion.log'
+    UFRAME['log_path'] + '/ingestion_' + datetime.datetime.today().strftime('%Y_%m_%d') + '.log'
     )
 handler.setLevel(logging.INFO)
 handler.setFormatter(
