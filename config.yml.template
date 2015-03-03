@@ -1,14 +1,13 @@
-# Set Default Sleep Timer
-SLEEP_TIMER: 0
+# Default configuration for the ingestion script. 
+# Copy this file to config.yml and adjust the settings as necessary.
 
-# Set up UFrame and EDEX paths and options
+SLEEP_TIMER: 3
 UFRAME:
     command: /home/developer/uframes/ooi/bin/ingestsender
-    # log_path: /home/wdk/race/log/
     log_path: .
     failed_ingestion_path: .
 EDEX:
     command: /home/developer/uframes/ooi/bin/edex-server
     log_path: /home/developer/uframes/ooi/uframe-1.0/edex/logs/
-    test_mode: True
-    cooldown: 5
+    test_mode: False
+    cooldown: 60
