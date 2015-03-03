@@ -6,6 +6,7 @@ Usage:
     python ingest.py [task] [options]
 
 **Valid Tasks**
+
 | Task | Description |
 | ---- | ----------- |
 | from_csv | Ingest data based on parameters stored in a CSV file. Takes a *file* argument. Contains the filename masks, uframe routes, reference designators, and data sources. This file must have the .csv extension. |
