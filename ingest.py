@@ -19,6 +19,7 @@ from glob import glob
 EDEX_LOG_FILES  = glob("%s%s" % (EDEX['log_path'], "edex-ooi*.log"))
 EDEX_LOG_FILES += glob("%s%s" % (EDEX['log_path'], "edex-ooi*.log.[0-9]*"))
 EDEX_LOG_FILES += glob("%s%s" % (EDEX['log_path'], "*.zip"))
+EDEX_LOG_FILES = sorted(EDEX_LOG_FILES)
 
 # Set up some basic logging.
 logging.basicConfig(level=logging.INFO)
@@ -267,7 +268,7 @@ class Ingestor(object):
             return bool(shell.zgrep(datafile, *EDEX_LOG_FILES)[1])
 
         # Get a list of files that match the file mask and log the list size.
-        data_files = glob(filename_mask)
+        data_files = sorted(glob(filename_mask))
         logger.info("%s file(s) found for %s" % (len(data_files), filename_mask))
 
         # If no files are found, consider the entire filename mask a failure and track it.
