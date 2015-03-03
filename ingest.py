@@ -11,6 +11,7 @@ import datetime
 import logging
 import subprocess
 import sys
+
 from time import sleep
 from config import SLEEP_TIMER, UFRAME, EDEX
 from whelk import shell
@@ -58,8 +59,6 @@ class Task(object):
 
     def __init__(self, args):
         ''' Parse and interpret common command-line options.'''
-        test_mode = "-t" in args
-        force_mode = "-f" in args
         sleep_timer = SLEEP_TIMER
         try:
             sleep_timer = int([a for a in args if a[:8]=="--sleep="][0].split("=")[1])
@@ -69,8 +68,8 @@ class Task(object):
             logger.error("--sleep must be set to an integer")
             sys.exit(5)
         self.options = {
-            'test_mode': test_mode, 
-            'force_mode': force_mode,
+            'test_mode': "-t" in args, 
+            'force_mode': "-f" in args,
             'sleep_timer': sleep_timer,
             }
         self.args = args
@@ -289,7 +288,7 @@ class Ingestor(object):
                     "One or more EDEX services crashed after ingesting the previous data file "
                     "(%s). Attempting to restart services." % previous_data_file
                     ))
-                self.service_manager.restart(stale_process_ids)
+                self.service_manager.restart()
 
             # Check if the data_file has previously been ingested. If it has, then skip it, unless 
             # force mode (-f) is active.
