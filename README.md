@@ -6,12 +6,11 @@ Usage:
     python ingest.py [task] [options]
 
 **Valid Tasks**
-
- * from_csv - Ingest data based on parameters stored in a CSV file.
-   * Takes a *file* argument. Contains the filename masks, uframe routes, reference designators, and data sources. This file must have the .csv extension.
- * from_csv_batch - Ingest data from multiple CSV files.
-   * Takes a *file argument. Contains the filenames of CSV files that will be ingested. This file must have a .csv.batch extension.
- * dummy - A dummy task that only instantiates an Ingestor object.
+| Task | Description |
+| ---- | ----------- |
+| from_csv | Ingest data based on parameters stored in a CSV file. Takes a *file* argument. Contains the filename masks, uframe routes, reference designators, and data sources. This file must have the .csv extension. |
+| from_csv_batch | Ingest data from multiple CSV files. Takes a *file argument. Contains the filenames of CSV files that will be ingested. This file must have a .csv.batch extension.|
+| dummy | A dummy task that only instantiates an Ingestor object. |
 
 **Common Options**
 
