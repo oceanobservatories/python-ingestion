@@ -5,7 +5,7 @@ Python scripts for ingestion of UFrame data.
 
     python ingest.py [task] [options]
 
-**Valid Tasks**
+**Tasks**
 
 | Task           | Description |
 | -------------- | ----------- |
@@ -13,7 +13,7 @@ Python scripts for ingestion of UFrame data.
 | from_csv_batch | Ingest data from multiple CSV files. Takes a *file* argument. Contains the filenames of CSV files that will be ingested. This file must have a .csv.batch extension.|
 | dummy          | A dummy task that only instantiates an Ingestor object. |
 
-**Common Options**
+**Options**
 
 | Switch    | Description |
 | --------- | ----------- |
