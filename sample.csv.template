@@ -1,0 +1,3 @@
+uframe_route,filename_mask,reference_designator,data_source
+Ingest.uframe_route_foo,/path/to/file/foo_*.mrg,REFERENCE_DESIGNATOR_0000_FOO,recovered
+Ingest.uframe_route_bar,/path/to/file/bar_*.mrg,REFERENCE_DESIGNATOR_0002_BAR,telemetered
