@@ -14,7 +14,7 @@ import sys
 
 from time import sleep
 from config import SLEEP_TIMER, UFRAME, EDEX
-from whelk import shell
+from whelk import shell, pipe
 from glob import glob
 
 EDEX_LOG_FILES  = glob("%s%s" % (EDEX['log_path'], "edex-ooi*.log"))
@@ -195,10 +195,6 @@ class ServiceManager(object):
         self.action("stop")
         self.action("start")
 
-    def kill(stale_process_ids):
-        for pid in stale_process_ids.itervalues():
-            pass
-
     def refresh_status(self):
         ''' Run the edex-server script's status command to get and store process IDs for all 
             services, as well as determine the actual PID for the EDEX application.
@@ -234,6 +230,17 @@ class ServiceManager(object):
                     self.process_ids['edex_server'] = None
         return all(self.process_ids.itervalues())
 
+    def wait_until_ready(self):
+        ''' Sits in a loop until all services are up and running. '''
+        while True:
+            if self.service_manager.refresh_status():
+                return
+            logger.warn((
+                "One or more EDEX services crashed after ingesting the previous data file "
+                "(%s). Attempting to restart services." % previous_data_file
+                ))
+            self.service_manager.restart()
+
 class Ingestor(object):
     ''' A helper class designed to handle the ingestion process.'''
 
@@ -262,9 +269,12 @@ class Ingestor(object):
                 'reference_designator': designator, 
                 'data_source': source,
                 }
-        def in_edex_log(datafile):
+        def in_edex_log(uframe_route, datafile):
             ''' Check EDEX logs to see if the file has been ingested by EDEX.'''
-            return bool(shell.zgrep(datafile, *EDEX_LOG_FILES)[1])
+            search_string = "%s.*%s" % (uframe_route, datafile)
+            return bool(pipe(
+                pipe.zgrep("-m1", search_string, *EDEX_LOG_FILES) | pipe.head("-1")
+                )[1])
 
         # Get a list of files that match the file mask and log the list size.
         data_files = sorted(glob(filename_mask))
@@ -280,15 +290,7 @@ class Ingestor(object):
         previous_data_file = ""
         for data_file in data_files:
             # Check if the EDEX services are still running. If not, attempt to restart them.
-            while True:
-                stale_process_ids = self.service_manager.process_ids
-                if self.service_manager.refresh_status():
-                    break
-                logger.warn((
-                    "One or more EDEX services crashed after ingesting the previous data file "
-                    "(%s). Attempting to restart services." % previous_data_file
-                    ))
-                self.service_manager.restart()
+            self.service_manager.wait_until_ready()
 
             # Check if the data_file has previously been ingested. If it has, then skip it, unless 
             # force mode (-f) is active.
