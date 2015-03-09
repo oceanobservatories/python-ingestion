@@ -294,7 +294,7 @@ class Ingestor(object):
 
             # Check if the data_file has previously been ingested. If it has, then skip it, unless 
             # force mode (-f) is active.
-            if in_edex_log(data_file):
+            if in_edex_log(uframe_route, data_file):
                 if self.force_mode:
                     logger.warning((
                         "EDEX logs indicate that %s has already been ingested, "
