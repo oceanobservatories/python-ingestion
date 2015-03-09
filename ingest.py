@@ -3,17 +3,18 @@
 Usage: python ingest.py from_csv <ingestion-parameters>.csv
 This script returns error codes at various points-of-failure:
     4 - There is a problem with the EDEX server.
-    5 - An integer value was not specified for the --sleep option.
+    5 - An integer value was not specified for the --sleep or --new option.
 '''
 
 import csv
 import datetime
 import logging
+import os
 import subprocess
 import sys
 
 from time import sleep
-from config import SLEEP_TIMER, UFRAME, EDEX
+from config import SLEEP_TIMER, MAX_FILE_AGE, UFRAME, EDEX
 from whelk import shell, pipe
 from glob import glob
 
@@ -59,18 +60,22 @@ class Task(object):
 
     def __init__(self, args):
         ''' Parse and interpret common command-line options.'''
-        sleep_timer = SLEEP_TIMER
-        try:
-            sleep_timer = int([a for a in args if a[:8]=="--sleep="][0].split("=")[1])
-        except IndexError:
-            pass
-        except ValueError:
-            logger.error("--sleep must be set to an integer")
-            sys.exit(5)
+
+        def number_switch(args, switch):
+            switch = "--%s=" % switch
+            try:
+                return int([a for a in args if a[:len(switch)]==switch][0].split("=")[1])
+            except IndexError:
+                return None
+            except ValueError:
+                logger.error("%s must be set to an integer" % switch)
+                sys.exit(5)
+
         self.options = {
             'test_mode': "-t" in args, 
             'force_mode': "-f" in args,
-            'sleep_timer': sleep_timer,
+            'sleep_timer': number_switch(args, "sleep") or SLEEP_TIMER,
+            'max_file_age': number_switch(args, "age") or MAX_FILE_AGE,
             }
         self.args = args
 
@@ -90,14 +95,15 @@ class Task(object):
             return False
 
         # Create an instance of the Ingestor class with common options set.
-        ingest = Ingestor(**self.options)
+        ingestor = Ingestor(**self.options)
 
         # Start the EDEX services and run the ingestion from the CSV file.
-        ingest.from_csv(csv_file)
+        ingestor.load_queue_from_csv(csv_file)
+        ingestor.ingest_from_queue()
 
         # Write out any failed ingestions to a new CSV file.
-        if ingest.failed_ingestions:
-            ingest.write_failures_to_csv(
+        if ingestor.failed_ingestions:
+            ingestor.write_failures_to_csv(
                 csv_file.split("/")[-1].split(".")[0])
         return True
 
@@ -105,7 +111,7 @@ class Task(object):
         ''' Ingest data mapped out by multiple CSV files, defined in a single .csv.batch file.'''
 
         # Create an instance of the Ingestor class with common options set.
-        ingest = Ingestor(**self.options)
+        ingestor = Ingestor(**self.options)
 
         # Open the batch list file and parse the csv paths into a list
         try:
@@ -118,7 +124,8 @@ class Task(object):
 
         # Start the EDEX services and ingest from each CSV file.
         for csv_file in csv_files:
-            ingest.from_csv(csv_file)
+            ingestor.load_queue_from_csv(csv_file)
+        ingestor.ingest_from_queue()
 
         # Write out any failed ingestions from the entire batch to a new CSV file.
         if ingest.failed_ingestions:
@@ -239,7 +246,7 @@ class ServiceManager(object):
                 "One or more EDEX services crashed after ingesting the previous data file "
                 "(%s). Attempting to restart services." % previous_data_file
                 ))
-            self.service_manager.restart()
+            self.restart()
 
 class Ingestor(object):
     ''' A helper class designed to handle the ingestion process.'''
@@ -248,6 +255,8 @@ class Ingestor(object):
         self.test_mode = options.get('test_mode', False)
         self.force_mode = options.get('force_mode', False)
         self.sleep_timer = options.get('sleep_timer', SLEEP_TIMER)
+        self.max_file_age = options.get('max_file_age', MAX_FILE_AGE)
+        self.queue = []
         self.failed_ingestions = []
 
         ''' Instantiate a ServiceManager for this Ingestor object and start the services if any are
@@ -256,9 +265,34 @@ class Ingestor(object):
         if not self.service_manager.refresh_status():
             self.service_manager.action("start")
 
-    def send(self, filename_mask, uframe_route, reference_designator, data_source):
-        ''' Finds the files that match the provided filename mask and calls UFrame's ingest sender 
-            application with the appropriate command-line arguments. '''
+    def load_queue(self, parameters):
+        ''' Finds the files that match the filename_mask parameter and loads them into the 
+            Ingestor object's queue. '''
+        filename_mask = parameters.get('filename_mask')
+
+        # Get a list of files that match the file mask and log the list size.
+        data_files = sorted(glob(filename_mask))
+        if self.max_file_age:
+            logger.info("Maximum file age set to %s seconds, filtering file list." % self.max_file_age)
+            current_time = datetime.datetime.now()
+            age = datetime.timedelta(seconds=self.max_file_age)
+            data_files = [
+                f for f in data_files
+                if current_time - datetime.datetime.fromtimestamp(os.path.getmtime(f)) < age]
+        
+        logger.info("%s file(s) found for %s" % (len(data_files), filename_mask))
+
+        # If no files are found, consider the entire filename mask a failure and track it.
+        if len(data_files) == 0:
+            self.failed_ingestions.append(parameters)
+            return False
+
+        parameters['data_files'] = data_files
+        self.queue.append(parameters)
+
+    def send(self, data_files, uframe_route, reference_designator, data_source):
+        ''' Calls UFrame's ingest sender application with the appropriate command-line arguments 
+            for all files specified in the data_files list. '''
 
         # Define some helper methods.
         def annotate_parameters(file, route, designator, source):
@@ -275,16 +309,6 @@ class Ingestor(object):
             return bool(pipe(
                 pipe.zgrep("-m1", search_string, *EDEX_LOG_FILES) | pipe.head("-1")
                 )[1])
-
-        # Get a list of files that match the file mask and log the list size.
-        data_files = sorted(glob(filename_mask))
-        logger.info("%s file(s) found for %s" % (len(data_files), filename_mask))
-
-        # If no files are found, consider the entire filename mask a failure and track it.
-        if len(data_files) == 0:
-            self.failed_ingestions.append(
-                annotate_parameters(filename_mask, uframe_route, reference_designator, data_source))
-            return False
 
         # Ingest each file in the file list.
         previous_data_file = ""
@@ -334,9 +358,9 @@ class Ingestor(object):
             sleep(self.sleep_timer)
         return True
 
-    def from_csv(self, csv_file):
+    def load_queue_from_csv(self, csv_file):
         ''' Reads the specified CSV file for mask, route, designator, and source parameters and 
-            calls the ingest sender method with the appropriate parameters. '''
+            loads the Ingestor object's queue with a batch with those matching parameters.'''
 
         try:
             reader = csv.DictReader(open(csv_file))
@@ -348,12 +372,20 @@ class Ingestor(object):
             logger.error("%s does not have valid column headers." % csv_file)
             return False
 
-        # Run ingestions for each row in the CSV, keeping track of any failures.
+        # Load the queue with parameters from each row.
         for row in reader:
-            self.send(**row)
-        logger.info(
-            "Ingestion task from_csv for %s completed with %s failure(s)." % (
-                csv_file, len(self.failed_ingestions)))
+            self.load_queue(row)
+
+    def ingest_from_queue(self):
+        ''' Call the ingestion command for each batch of files in the Ingestor object's queue. '''
+
+        # TODO: Write out the entire ingestion queue to a file before ingesting.
+
+        for batch in self.queue:
+            filename_mask = batch.pop('filename_mask')
+            logger.info(
+                "Ingesting %s files for %s from the queue." % (len(self.queue), filename_mask))
+            self.send(**batch)
 
     def write_failures_to_csv(self, label):
         ''' Write any failed ingestions out into a CSV file that can be re-ingested later. '''
