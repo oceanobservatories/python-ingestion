@@ -233,7 +233,7 @@ class ServiceManager(object):
     def wait_until_ready(self):
         ''' Sits in a loop until all services are up and running. '''
         while True:
-            if self.service_manager.refresh_status():
+            if self.refresh_status():
                 return
             logger.warn((
                 "One or more EDEX services crashed after ingesting the previous data file "
