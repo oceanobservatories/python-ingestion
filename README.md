@@ -15,10 +15,10 @@ Python scripts for ingestion of UFrame data.
 
 **Options**
 
-| Switch      | Description |
-| ----------- | ----------- |
-| -t          | an optional switch that puts the script in test mode. No data will actually be ingested.|
-| -f          | an optional switch that will force the script to disregard the EDEX log file checks for already ingested data. |
-| --sleep=*n* | an optional switch that overrides the sleep timer with a value of *n* seconds. |
-| --age=*n*   | an optional switch that specifies the maximum age of the files to be ingested in *n* seconds. |
-
+| Switch          | Description |
+| --------------- | ----------- |
+| -t              | puts the script in test mode. No data will actually be ingested.|
+| -f              | forces the script to disregard the EDEX log file checks for already ingested data. |
+| --sleep=*n*     | overrides the sleep timer with a value of *n* seconds. |
+| --age=*n*       | specifies the maximum age of the files to be ingested in *n* seconds. |
+| --cooldown=*n*  | overrides the EDEX service startup cooldown timer with a value of *n* seconds. |

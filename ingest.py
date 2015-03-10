@@ -18,9 +18,9 @@ from config import SLEEP_TIMER, MAX_FILE_AGE, UFRAME, EDEX
 from whelk import shell, pipe
 from glob import glob
 
-EDEX_LOG_FILES  = glob("%s%s" % (EDEX['log_path'], "edex-ooi*.log"))
-EDEX_LOG_FILES += glob("%s%s" % (EDEX['log_path'], "edex-ooi*.log.[0-9]*"))
-EDEX_LOG_FILES += glob("%s%s" % (EDEX['log_path'], "*.zip"))
+EDEX_LOG_FILES  = glob("/".join((EDEX['log_path'], "edex-ooi*.log")))
+EDEX_LOG_FILES += glob("/".join((EDEX['log_path'], "edex-ooi*.log.[0-9]*")))
+EDEX_LOG_FILES += glob("/".join((EDEX['log_path'], "*.zip")))
 EDEX_LOG_FILES = sorted(EDEX_LOG_FILES)
 
 # Set up some basic logging.
@@ -36,7 +36,11 @@ logger = logging.getLogger(__name__)
 logger.addHandler(handler)
 logger.propagate = False
 
-def source(script, update=True):
+def set_options(object, attrs, options):
+    for attr in attrs:
+        setattr(object, attr, options[attr])
+
+def source_env(script, update=True):
     """
     http://pythonwise.blogspot.fr/2010/04/sourcing-shell-script.html (Miki Tebeka)
     """
@@ -76,6 +80,8 @@ class Task(object):
             'force_mode': "-f" in args,
             'sleep_timer': number_switch(args, "sleep") or SLEEP_TIMER,
             'max_file_age': number_switch(args, "age") or MAX_FILE_AGE,
+            'edex_command': EDEX['command'],
+            'cooldown': number_switch(args, "cooldown") or EDEX['cooldown'],
             }
         self.args = args
 
@@ -99,6 +105,7 @@ class Task(object):
 
         # Start the EDEX services and run the ingestion from the CSV file.
         ingestor.load_queue_from_csv(csv_file)
+        ingestor.write_queue_to_file()
         ingestor.ingest_from_queue()
 
         # Write out any failed ingestions to a new CSV file.
@@ -125,6 +132,7 @@ class Task(object):
         # Start the EDEX services and ingest from each CSV file.
         for csv_file in csv_files:
             ingestor.load_queue_from_csv(csv_file)
+        ingestor.write_queue_to_file()
         ingestor.ingest_from_queue()
 
         # Write out any failed ingestions from the entire batch to a new CSV file.
@@ -137,9 +145,8 @@ class ServiceManager(object):
     ''' A helper class that manages the services that the ingestion depends on.'''
 
     def __init__(self, **options):
-        self.test_mode = options.get('test_mode', False)
-        self.edex_command = options.get('edex_command', EDEX['command'])
-        self.cooldown = options.get('cooldown', EDEX['cooldown'])
+        set_options(
+            self, ('test_mode', 'edex_command', 'cooldown'), options)
 
         # Source the EDEX server environment.
         if self.test_mode or EDEX['test_mode']:
@@ -150,7 +157,7 @@ class ServiceManager(object):
         # Source the EDEX environment.
         try:
             logger.info("Sourcing the EDEX server environment.")
-            source(self.edex_command)
+            source_env(self.edex_command)
         except Exception:
             logger.exception(
                 "An error occurred when sourcing the EDEX server environment.")
@@ -252,10 +259,8 @@ class Ingestor(object):
     ''' A helper class designed to handle the ingestion process.'''
 
     def __init__(self, **options):
-        self.test_mode = options.get('test_mode', False)
-        self.force_mode = options.get('force_mode', False)
-        self.sleep_timer = options.get('sleep_timer', SLEEP_TIMER)
-        self.max_file_age = options.get('max_file_age', MAX_FILE_AGE)
+        set_options(
+            self, ('test_mode', 'force_mode', 'sleep_timer', 'max_file_age'), options)
         self.queue = []
         self.failed_ingestions = []
 
@@ -268,10 +273,16 @@ class Ingestor(object):
     def load_queue(self, parameters):
         ''' Finds the files that match the filename_mask parameter and loads them into the 
             Ingestor object's queue. '''
-        filename_mask = parameters.get('filename_mask')
 
+        def in_edex_log(uframe_route, datafile):
+            ''' Check EDEX logs to see if the file has been ingested by EDEX.'''
+            search_string = "%s.*%s" % (uframe_route, datafile)
+            return bool(pipe(
+                pipe.zgrep("-m1", search_string, *EDEX_LOG_FILES) | pipe.head("-1")
+                )[1])
+        
         # Get a list of files that match the file mask and log the list size.
-        data_files = sorted(glob(filename_mask))
+        data_files = sorted(glob(parameters['filename_mask']))
         if self.max_file_age:
             logger.info("Maximum file age set to %s seconds, filtering file list." % self.max_file_age)
             current_time = datetime.datetime.now()
@@ -280,14 +291,30 @@ class Ingestor(object):
                 f for f in data_files
                 if current_time - datetime.datetime.fromtimestamp(os.path.getmtime(f)) < age]
         
-        logger.info("%s file(s) found for %s" % (len(data_files), filename_mask))
+        # Check if the data_file has previously been ingested. If it has, then skip it, unless 
+        # force mode (-f) is active.
+        filtered_data_files = []
+        for data_file in data_files:
+            if in_edex_log(parameters['uframe_route'], data_file):
+                if self.force_mode:
+                    logger.warning((
+                        "EDEX logs indicate that %s has already been ingested, "
+                        "but force mode (-f) is active. The file will be reingested.") % data_file)
+                else:
+                    logger.warning((
+                        "EDEX logs indicate that %s has already been ingested. "
+                        "The file will not be reingested.") % data_file)
+                    continue
+            filtered_data_files.append(data_file)
+
+        logger.info("%s file(s) found for %s" % (len(data_files), parameters['filename_mask']))
 
         # If no files are found, consider the entire filename mask a failure and track it.
-        if len(data_files) == 0:
+        if len(filtered_data_files) == 0:
             self.failed_ingestions.append(parameters)
             return False
 
-        parameters['data_files'] = data_files
+        parameters['data_files'] = filtered_data_files
         self.queue.append(parameters)
 
     def send(self, data_files, uframe_route, reference_designator, data_source):
@@ -303,31 +330,12 @@ class Ingestor(object):
                 'reference_designator': designator, 
                 'data_source': source,
                 }
-        def in_edex_log(uframe_route, datafile):
-            ''' Check EDEX logs to see if the file has been ingested by EDEX.'''
-            search_string = "%s.*%s" % (uframe_route, datafile)
-            return bool(pipe(
-                pipe.zgrep("-m1", search_string, *EDEX_LOG_FILES) | pipe.head("-1")
-                )[1])
 
         # Ingest each file in the file list.
         previous_data_file = ""
         for data_file in data_files:
             # Check if the EDEX services are still running. If not, attempt to restart them.
             self.service_manager.wait_until_ready()
-
-            # Check if the data_file has previously been ingested. If it has, then skip it, unless 
-            # force mode (-f) is active.
-            if in_edex_log(uframe_route, data_file):
-                if self.force_mode:
-                    logger.warning((
-                        "EDEX logs indicate that %s has already been ingested, "
-                        "but force mode (-f) is active. The file will be reingested.") % data_file)
-                else:
-                    logger.warning((
-                        "EDEX logs indicate that %s has already been ingested. "
-                        "The file will not be reingested.") % data_file)
-                    continue
 
             ingestion_command = (
                 UFRAME['command'], uframe_route, data_file, reference_designator, data_source)
@@ -378,14 +386,27 @@ class Ingestor(object):
 
     def ingest_from_queue(self):
         ''' Call the ingestion command for each batch of files in the Ingestor object's queue. '''
-
-        # TODO: Write out the entire ingestion queue to a file before ingesting.
-
         for batch in self.queue:
             filename_mask = batch.pop('filename_mask')
             logger.info(
-                "Ingesting %s files for %s from the queue." % (len(self.queue), filename_mask))
+                "Ingesting %s files for %s from the queue." % (len(batch['data_files']), filename_mask))
             self.send(**batch)
+
+    def write_queue_to_file(self, command_file=None):
+        ''' Write the ingestion command for each file to be ingested to a log file. '''
+        commands_file = command_file or \
+            UFRAME['log_path'] + '/commands_' + datetime.datetime.today().strftime('%Y_%m_%d_%H_%M') + '.log'
+        with open(commands_file, 'w') as outfile:
+            for batch in self.queue:
+                for data_file in batch['data_files']:
+                    ingestion_command = " ".join((
+                        UFRAME['command'], 
+                        batch['uframe_route'], 
+                        data_file, 
+                        batch['reference_designator'], 
+                        batch['data_source'])) + "\n"
+                    outfile.write(ingestion_command)
+        logger.info('Wrote queue to %s.' % commands_file)
 
     def write_failures_to_csv(self, label):
         ''' Write any failed ingestions out into a CSV file that can be re-ingested later. '''
