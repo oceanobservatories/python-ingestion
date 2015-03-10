@@ -73,12 +73,12 @@ class Task(object):
         self.options = {
             'test_mode': "-t" in args, 
             'force_mode': "-f" in args,
+            'no_zip': "-nozip" in args,
             'sleep_timer': number_switch(args, "sleep") or SLEEP_TIMER,
             'max_file_age': number_switch(args, "age") or MAX_FILE_AGE,
-            'edex_command': EDEX['command'],
             'cooldown': number_switch(args, "cooldown") or EDEX['cooldown'],
             'quick_look_quantity': number_switch(args, "quick") or QUICK_LOOK_QUANTITY,
-            'no_zip': "-nozip" in args,
+            'edex_command': EDEX['command'],
             }
         self.args = args
 
@@ -285,19 +285,22 @@ class Ingestor(object):
             ''' Check EDEX logs to see if the file has been ingested by EDEX.'''
             search_string = "%s.*%s" % (uframe_route, datafile)
             return bool(pipe(
-                pipe.zgrep("-m1", search_string, *self.service_manager.edex_log_files) | pipe.head("-1")
+                pipe.zgrep(
+                    "-m1", search_string, *self.service_manager.edex_log_files) | pipe.head("-1")
                 )[1])
         
         # Get a list of files that match the file mask and log the list size.
         data_files = sorted(glob(parameters['filename_mask']))
         if self.max_file_age:
-            logger.info("Maximum file age set to %s seconds, filtering file list." % self.max_file_age)
+            logger.info("Maximum file age set to %s seconds, filtering file list." % (
+                self.max_file_age))
             current_time = datetime.datetime.now()
             age = datetime.timedelta(seconds=self.max_file_age)
             data_files = [
                 f for f in data_files
                 if current_time - datetime.datetime.fromtimestamp(os.path.getmtime(f)) < age]
-        
+        logger.info('%s file(s) found for %s before filtering.' % parameters['filename_mask'])
+
         # Check if the data_file has previously been ingested. If it has, then skip it, unless 
         # force mode (-f) is active.
         filtered_data_files = []
@@ -309,11 +312,13 @@ class Ingestor(object):
                 if self.force_mode:
                     logger.warning((
                         "EDEX logs indicate that %s has already been ingested, "
-                        "but force mode (-f) is active. The file will be reingested.") % file_and_queue)
+                        "but force mode (-f) is active. The file will be reingested."
+                        ) % file_and_queue)
                 else:
                     logger.warning((
                         "EDEX logs indicate that %s has already been ingested. "
-                        "The file will not be reingested.") % file_and_queue)
+                        "The file will not be reingested."
+                        ) % file_and_queue)
                     continue
             filtered_data_files.append(data_file)
 
@@ -322,16 +327,20 @@ class Ingestor(object):
             self.failed_ingestions.append(parameters)
             return False
 
+        ''' If a quick look quantity is set (either through the config.yml or the command-line 
+            argument), truncate the size of the list down to the specified quantity. '''
         if self.quick_look_quantity and self.quick_look_quantity < len(filtered_data_files):
             logger.info(
                 "Quick look quantity is set to %s. The %s of %s file(s) will be queued." % (
                     self.quick_look_quantity, self.quick_look_quantity, len(filtered_data_files)))
             filtered_data_files = filtered_data_files[:self.quick_look_quantity]
             logger.info(
-                "%s file(s) from %s set for quick look ingestion." % (len(filtered_data_files), parameters['filename_mask']))
+                "%s file(s) from %s set for quick look ingestion." % (
+                    len(filtered_data_files), parameters['filename_mask']))
         else:
             logger.info(
-                "%s file(s) from %s set for ingestion." % (len(filtered_data_files), parameters['filename_mask']))
+                "%s file(s) from %s set for ingestion." % (
+                    len(filtered_data_files), parameters['filename_mask']))
 
         parameters['data_files'] = filtered_data_files
         self.queue.append(parameters)
@@ -408,7 +417,8 @@ class Ingestor(object):
         for batch in self.queue:
             filename_mask = batch.pop('filename_mask')
             logger.info(
-                "Ingesting %s files for %s from the queue." % (len(batch['data_files']), filename_mask))
+                "Ingesting %s files for %s from the queue." % (
+                    len(batch['data_files']), filename_mask))
             self.send(**batch)
 
     def write_queue_to_file(self, command_file=None):
