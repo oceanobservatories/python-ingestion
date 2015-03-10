@@ -18,11 +18,6 @@ from config import SLEEP_TIMER, MAX_FILE_AGE, QUICK_LOOK_QUANTITY, UFRAME, EDEX
 from whelk import shell, pipe
 from glob import glob
 
-EDEX_LOG_FILES  = glob("/".join((EDEX['log_path'], "edex-ooi*.log")))
-EDEX_LOG_FILES += glob("/".join((EDEX['log_path'], "edex-ooi*.log.[0-9]*")))
-EDEX_LOG_FILES += glob("/".join((EDEX['log_path'], "*.zip")))
-EDEX_LOG_FILES = sorted(EDEX_LOG_FILES)
-
 # Set up some basic logging.
 logging.basicConfig(level=logging.INFO)
 handler = logging.FileHandler(
@@ -82,7 +77,8 @@ class Task(object):
             'max_file_age': number_switch(args, "age") or MAX_FILE_AGE,
             'edex_command': EDEX['command'],
             'cooldown': number_switch(args, "cooldown") or EDEX['cooldown'],
-            'quick_look_quantity': number_switch(args, "quick") or QUICK_LOOK_QUANTITY
+            'quick_look_quantity': number_switch(args, "quick") or QUICK_LOOK_QUANTITY,
+            'no_zip': "-nozip" in args,
             }
         self.args = args
 
@@ -150,6 +146,12 @@ class ServiceManager(object):
             self, 
             ('test_mode', 'edex_command', 'cooldown'), 
             options)
+
+        self.edex_log_files  = glob("/".join((EDEX['log_path'], "edex-ooi*.log")))
+        self.edex_log_files += glob("/".join((EDEX['log_path'], "edex-ooi*.log.[0-9]*")))
+        if not self.no_zip:
+            self.edex_log_files += glob("/".join((EDEX['log_path'], "*.zip")))
+        self.edex_log_files = sorted(self.edex_log_files)
 
         # Source the EDEX server environment.
         if self.test_mode or EDEX['test_mode']:
@@ -283,7 +285,7 @@ class Ingestor(object):
             ''' Check EDEX logs to see if the file has been ingested by EDEX.'''
             search_string = "%s.*%s" % (uframe_route, datafile)
             return bool(pipe(
-                pipe.zgrep("-m1", search_string, *EDEX_LOG_FILES) | pipe.head("-1")
+                pipe.zgrep("-m1", search_string, *self.service_manager.edex_log_files) | pipe.head("-1")
                 )[1])
         
         # Get a list of files that match the file mask and log the list size.
