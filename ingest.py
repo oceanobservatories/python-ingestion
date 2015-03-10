@@ -299,7 +299,9 @@ class Ingestor(object):
             data_files = [
                 f for f in data_files
                 if current_time - datetime.datetime.fromtimestamp(os.path.getmtime(f)) < age]
-        logger.info('%s file(s) found for %s before filtering.' % parameters['filename_mask'])
+        logger.info(
+            "%s file(s) found for %s before filtering." % (
+                len(data_files), parameters['filename_mask']))
 
         # Check if the data_file has previously been ingested. If it has, then skip it, unless 
         # force mode (-f) is active.
