@@ -144,7 +144,7 @@ class ServiceManager(object):
     def __init__(self, **options):
         set_options(
             self, 
-            ('test_mode', 'edex_command', 'cooldown'), 
+            ('test_mode', 'edex_command', 'cooldown', 'no_zip'), 
             options)
 
         self.edex_log_files  = glob("/".join((EDEX['log_path'], "edex-ooi*.log")))
