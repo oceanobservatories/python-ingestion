@@ -300,15 +300,18 @@ class Ingestor(object):
         # force mode (-f) is active.
         filtered_data_files = []
         for data_file in data_files:
+            file_and_queue = "%s (%s)" % (data_file, parameters['uframe_route'])
+            logger.info(
+                "Checking if %s has already been ingested." % file_and_queue)
             if in_edex_log(parameters['uframe_route'], data_file):
                 if self.force_mode:
                     logger.warning((
                         "EDEX logs indicate that %s has already been ingested, "
-                        "but force mode (-f) is active. The file will be reingested.") % data_file)
+                        "but force mode (-f) is active. The file will be reingested.") % file_and_queue)
                 else:
                     logger.warning((
                         "EDEX logs indicate that %s has already been ingested. "
-                        "The file will not be reingested.") % data_file)
+                        "The file will not be reingested.") % file_and_queue)
                     continue
             filtered_data_files.append(data_file)
 
