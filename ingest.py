@@ -14,7 +14,7 @@ import subprocess
 import sys
 
 from time import sleep
-from config import SLEEP_TIMER, MAX_FILE_AGE, UFRAME, EDEX
+from config import SLEEP_TIMER, MAX_FILE_AGE, QUICK_LOOK_QUANTITY, UFRAME, EDEX
 from whelk import shell, pipe
 from glob import glob
 
@@ -82,6 +82,7 @@ class Task(object):
             'max_file_age': number_switch(args, "age") or MAX_FILE_AGE,
             'edex_command': EDEX['command'],
             'cooldown': number_switch(args, "cooldown") or EDEX['cooldown'],
+            'quick_look_quantity': number_switch(args, "quick") or QUICK_LOOK_QUANTITY
             }
         self.args = args
 
@@ -146,7 +147,9 @@ class ServiceManager(object):
 
     def __init__(self, **options):
         set_options(
-            self, ('test_mode', 'edex_command', 'cooldown'), options)
+            self, 
+            ('test_mode', 'edex_command', 'cooldown'), 
+            options)
 
         # Source the EDEX server environment.
         if self.test_mode or EDEX['test_mode']:
@@ -260,7 +263,9 @@ class Ingestor(object):
 
     def __init__(self, **options):
         set_options(
-            self, ('test_mode', 'force_mode', 'sleep_timer', 'max_file_age'), options)
+            self, 
+            ('test_mode', 'force_mode', 'sleep_timer', 'max_file_age', 'quick_look_quantity'), 
+            options)
         self.queue = []
         self.failed_ingestions = []
 
@@ -307,12 +312,21 @@ class Ingestor(object):
                     continue
             filtered_data_files.append(data_file)
 
-        logger.info("%s file(s) found for %s" % (len(data_files), parameters['filename_mask']))
-
         # If no files are found, consider the entire filename mask a failure and track it.
         if len(filtered_data_files) == 0:
             self.failed_ingestions.append(parameters)
             return False
+
+        if self.quick_look_quantity and self.quick_look_quantity < len(filtered_data_files):
+            logger.info(
+                "Quick look quantity is set to %s. The %s of %s file(s) will be queued." % (
+                    self.quick_look_quantity, self.quick_look_quantity, len(filtered_data_files)))
+            filtered_data_files = filtered_data_files[:self.quick_look_quantity]
+            logger.info(
+                "%s file(s) from %s set for quick look ingestion." % (len(filtered_data_files), parameters['filename_mask']))
+        else:
+            logger.info(
+                "%s file(s) from %s set for ingestion." % (len(filtered_data_files), parameters['filename_mask']))
 
         parameters['data_files'] = filtered_data_files
         self.queue.append(parameters)

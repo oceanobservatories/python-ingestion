@@ -3,6 +3,7 @@
 
 SLEEP_TIMER: 3
 MAX_FILE_AGE: null
+QUICK_LOOK_QUANTITY: null
 
 UFRAME:
     command: /home/developer/uframes/ooi/bin/ingestsender
