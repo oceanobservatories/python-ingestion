@@ -40,7 +40,6 @@ def set_options(object, attrs, options):
         'cooldown': EDEX['cooldown'],
         'quick_look_quantity': None,
         'edex_command': EDEX['command'],
-        'no_zip': False,
         }
     for attr in attrs:
         setattr(object, attr, options.get(attr, defaults[attr]))
@@ -84,7 +83,6 @@ class Task(object):
         self.options = {
             'test_mode': "-t" in args, 
             'force_mode': "-f" in args,
-            'no_zip': "-nozip" in args,
             'sleep_timer': number_switch(args, "sleep") or SLEEP_TIMER,
             'max_file_age': number_switch(args, "age") or MAX_FILE_AGE,
             'cooldown': number_switch(args, "cooldown") or EDEX['cooldown'],
@@ -149,24 +147,17 @@ class Task(object):
                 csv_batch.split("/")[-1].split(".")[0] + "_batch")
         return True
 
-    def pre_process_logs(self):
-        pass
-
 class ServiceManager(object):
     ''' A helper class that manages the services that the ingestion depends on.'''
 
     def __init__(self, **options):
-        set_options(
-            self, 
-            ('test_mode', 'edex_command', 'cooldown', 'no_zip'), 
-            options)
+        set_options(self, ('test_mode', 'edex_command', 'cooldown'), options)
 
-        self.edex_log_files  = glob("/".join((EDEX['log_path'], "edex-ooi*.log")))
-        self.edex_log_files += glob("/".join((EDEX['log_path'], "edex-ooi*.log.[0-9]*")))
-        if not self.no_zip:
-            self.edex_log_files += glob("/".join((EDEX['log_path'], "*.zip")))
-        self.edex_log_files = [l for l in self.edex_log_files if ".lck" not in l]
-        self.edex_log_files = sorted(self.edex_log_files)
+        edex_logs  = glob("/".join((EDEX['log_path'], "edex-ooi*.log")))
+        edex_logs += glob("/".join((EDEX['log_path'], "edex-ooi*.log.[0-9]*")))
+        edex_logs += glob("/".join((EDEX['log_path'], "*.zip")))
+        edex_logs = sorted([l for l in edex_logs if ".lck" not in l])
+        self.edex_log_files = self.process_all_logs(edex_logs)
 
         # Source the EDEX server environment.
         if self.test_mode or EDEX['test_mode']:
@@ -276,11 +267,33 @@ class ServiceManager(object):
             self.restart()
 
     def process_log(self, log_file):
+        ''' Processes an EDEX log and creates a new log file with only the relevant, 
+            searchable data. '''
+        logger.info("Processing log file %s." % log_file)
         result = shell.zgrep("Latency", log_file)[1]
-        file_name = log_file.split("/")[-1]
-        with open("/".join((EDEX['processed_log_path'], file_name + ".p")), "w") as outfile:
+        new_log_file = "/".join((EDEX['processed_log_path'], log_file.split("/")[-1] + ".p"))
+
+        if os.path.isfile(new_log_file):
+            log_file_timestamp = datetime.datetime.fromtimestamp(os.path.getmtime(log_file))
+            new_log_file_timestamp = datetime.datetime.fromtimestamp(os.path.getmtime(new_log_file))
+            if log_file_timestamp < new_log_file_timestamp:
+                logger.info(
+                    "Log file %s has already been processed." % log_file)
+                return
+            else:
+                logger.info((
+                    "Log file %s has already been processed, "
+                    "but has been modified and will be re-processed."
+                    ) % log_file)
+        with open(new_log_file, "w") as outfile:
             for row in result:
                 outfile.write(row)
+        logger.info("Wrote new log file to %s." % new_log_file)
+
+    def process_all_logs(self, edex_logs):
+        for log_file in edex_logs:
+            self.process_log(log_file)
+        return glob("/".join((EDEX['processed_log_path'], "*.p")))
 
 class Ingestor(object):
     ''' A helper class designed to handle the ingestion process.'''
