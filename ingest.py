@@ -165,6 +165,7 @@ class ServiceManager(object):
         self.edex_log_files += glob("/".join((EDEX['log_path'], "edex-ooi*.log.[0-9]*")))
         if not self.no_zip:
             self.edex_log_files += glob("/".join((EDEX['log_path'], "*.zip")))
+        self.edex_log_files = [l for l in self.edex_log_files if ".lck" not in l]
         self.edex_log_files = sorted(self.edex_log_files)
 
         # Source the EDEX server environment.
@@ -275,7 +276,11 @@ class ServiceManager(object):
             self.restart()
 
     def process_log(self, log_file):
-        pass
+        result = shell.zgrep("Latency", logfile)
+        file_name = logfile.split("/")[-1]
+        with open("/".join((EDEX['processed_log_path'], file_name + ".p")), "w") as outfile:
+            for row in result:
+                outfile.write(row)
 
 class Ingestor(object):
     ''' A helper class designed to handle the ingestion process.'''
