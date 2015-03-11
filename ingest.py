@@ -289,7 +289,7 @@ class ServiceManager(object):
             for row in result:
                 outfile.write(row)
         logger.info(
-            "% has been processed and written to %s." % (log_file, new_log_file))
+            "%s has been processed and written to %s." % (log_file, new_log_file))
 
     def process_all_logs(self, edex_logs):
         logger.info("Pre-processing log files for duplicate searching.")
