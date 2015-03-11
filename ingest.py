@@ -375,13 +375,11 @@ class Ingestor(object):
         ''' If a quick look quantity is set (either through the config.yml or the command-line 
             argument), truncate the size of the list down to the specified quantity. '''
         if self.quick_look_quantity and self.quick_look_quantity < len(filtered_data_files):
-            logger.info(
-                "Quick look quantity is set to %s. The %s of %s file(s) will be queued." % (
-                    self.quick_look_quantity, self.quick_look_quantity, len(filtered_data_files)))
+            before_quick_look = len(filtered_data_files)
             filtered_data_files = filtered_data_files[:self.quick_look_quantity]
             logger.info(
-                "%s file(s) from %s set for quick look ingestion." % (
-                    len(filtered_data_files), parameters['filename_mask']))
+                "%s of %s file(s) from %s set for quick look ingestion." % (
+                    len(filtered_data_files), before_quick_look, parameters['filename_mask']))
         else:
             logger.info(
                 "%s file(s) from %s set for ingestion." % (
@@ -389,7 +387,6 @@ class Ingestor(object):
 
         parameters['data_files'] = filtered_data_files
         self.queue.append(parameters)
-        logger.info("%s file(s) added to queue." % len(filtered_data_files))
 
     def send(self, data_files, uframe_route, reference_designator, data_source):
         ''' Calls UFrame's ingest sender application with the appropriate command-line arguments 
