@@ -350,9 +350,7 @@ class Ingestor(object):
         # force mode (-f) is active.
         filtered_data_files = []
         logger.info(
-            "Determining if any files from %s have already been ingested (%s files)." % (
-                parameters['filename_mask'], len(data_files)
-                ))
+            "Determining if any files have already been ingested to %s." % parameters['uframe_route'])
         for data_file in data_files:
             file_and_queue = "%s (%s)" % (data_file, parameters['uframe_route'])
             if in_edex_log(parameters['uframe_route'], data_file):
@@ -391,6 +389,7 @@ class Ingestor(object):
 
         parameters['data_files'] = filtered_data_files
         self.queue.append(parameters)
+        logger.info("%s file(s) added to queue." % len(filtered_data_files))
 
     def send(self, data_files, uframe_route, reference_designator, data_source):
         ''' Calls UFrame's ingest sender application with the appropriate command-line arguments 
