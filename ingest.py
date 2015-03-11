@@ -118,6 +118,8 @@ class Task(object):
         if ingestor.failed_ingestions:
             ingestor.write_failures_to_csv(
                 csv_file.split("/")[-1].split(".")[0])
+
+        logger.info("Ingestion completed.")
         return True
 
     def from_csv_batch(self):
@@ -145,6 +147,8 @@ class Task(object):
         if ingest.failed_ingestions:
             ingest.write_failures_to_csv(
                 csv_batch.split("/")[-1].split(".")[0] + "_batch")
+
+        logger.info("Ingestion completed.")
         return True
 
 class ServiceManager(object):
@@ -334,6 +338,8 @@ class Ingestor(object):
         
         # Get a list of files that match the file mask and log the list size.
         data_files = sorted(glob(parameters['filename_mask']))
+
+        # If a maximum file age is set, only ingest files that fall within that age.
         if self.max_file_age:
             logger.info("Maximum file age set to %s seconds, filtering file list." % (
                 self.max_file_age))
@@ -342,6 +348,7 @@ class Ingestor(object):
             data_files = [
                 f for f in data_files
                 if current_time - datetime.datetime.fromtimestamp(os.path.getmtime(f)) < age]
+
         logger.info(
             "%s file(s) found for %s before filtering." % (
                 len(data_files), parameters['filename_mask']))
