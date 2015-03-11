@@ -20,5 +20,6 @@ Python scripts for ingestion of UFrame data.
 | -t              | puts the script in test mode. No data will actually be ingested.|
 | -f              | forces the script to disregard the EDEX log file checks for already ingested data. |
 | --sleep=*n*     | overrides the sleep timer with a value of *n* seconds. |
-| --age=*n*       | specifies the maximum age of the files to be ingested in *n* seconds. |
+| --age=*n*       | overrides the maximum age of the files to be ingested in *n* seconds. |
 | --cooldown=*n*  | overrides the EDEX service startup cooldown timer with a value of *n* seconds. |
+| --quick=*n*     | overrides the number of files per filemask to ingest. Used for quick look ingestions. |

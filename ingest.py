@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 '''
-Usage: python ingest.py from_csv <ingestion-parameters>.csv
+Usage: python ingest.py [task] [options]
 This script returns error codes at various points-of-failure:
     4 - There is a problem with the EDEX server.
     5 - An integer value was not specified for the --sleep or --new option.
@@ -44,18 +44,6 @@ def set_options(object, attrs, options):
     for attr in attrs:
         setattr(object, attr, options.get(attr, defaults[attr]))
 
-def source_env(script, update=True):
-    """
-    http://pythonwise.blogspot.fr/2010/04/sourcing-shell-script.html (Miki Tebeka)
-    """
-    import subprocess, os
-    proc = subprocess.Popen(". %s; env -0" % script, stdout=subprocess.PIPE, shell=True)
-    output = proc.communicate()[0]
-    env = dict((line.split("=", 1) for line in output.split('\x00') if line))
-    if update:
-        os.environ.update(env)
-    return env
-
 class Task(object):
     ''' A helper class designed to manage the different types of ingestion tasks.'''
 
@@ -64,7 +52,6 @@ class Task(object):
         'dummy',            # A dummy task. Doesn't do anything.
         'from_csv',         # Ingest from a single CSV file.
         'from_csv_batch',   # Ingest from multiple CSV files defined in a batch.
-        'pre_process_logs', # Process EDEX log files to strip out un-needed data.
         ) 
 
     def __init__(self, args):
@@ -157,11 +144,7 @@ class ServiceManager(object):
     def __init__(self, **options):
         set_options(self, ('test_mode', 'edex_command', 'cooldown'), options)
 
-        edex_logs  = glob("/".join((EDEX['log_path'], "edex-ooi*.log")))
-        edex_logs += glob("/".join((EDEX['log_path'], "edex-ooi*.log.[0-9]*")))
-        edex_logs += glob("/".join((EDEX['log_path'], "*.zip")))
-        edex_logs = sorted([l for l in edex_logs if ".lck" not in l])
-        self.edex_log_files = self.process_all_logs(edex_logs)
+        self.edex_log_files = self.process_all_logs()
 
         # Source the EDEX server environment.
         if self.test_mode or EDEX['test_mode']:
@@ -172,7 +155,11 @@ class ServiceManager(object):
         # Source the EDEX environment.
         try:
             logger.info("Sourcing the EDEX server environment.")
-            source_env(self.edex_command)
+            # http://pythonwise.blogspot.fr/2010/04/sourcing-shell-script.html (Miki Tebeka)
+            proc = subprocess.Popen(". %s; env -0" % self.edex_command, stdout=subprocess.PIPE, shell=True)
+            output = proc.communicate()[0]
+            env = dict((line.split("=", 1) for line in output.split('\x00') if line))
+            os.environ.update(env)
         except Exception:
             logger.exception(
                 "An error occurred when sourcing the EDEX server environment.")
@@ -248,13 +235,16 @@ class ServiceManager(object):
                     value = value[0]
                 self.process_ids[name] = value
 
-            # Determine the child processes for edex_ooi to get the actual PID of the EDEX application.
+            ''' Determine the child processes for edex_ooi to get the actual PID of the EDEX 
+                application. '''
             if self.test_mode:
                 self.process_ids['edex_wrapper'], self.process_ids['edex_server'] = "test", "test"
             else:
-                self.process_ids['edex_wrapper'] = shell.pgrep("-P", self.process_ids["edex_ooi"])[1].split('\n')[0]
+                self.process_ids['edex_wrapper'] = \
+                    shell.pgrep("-P", self.process_ids["edex_ooi"])[1].split('\n')[0]
                 if self.process_ids['edex_wrapper']:
-                    self.process_ids['edex_server'] = shell.pgrep("-P", self.process_ids["edex_wrapper"])[1].split('\n')[0]
+                    self.process_ids['edex_server'] = \
+                        shell.pgrep("-P", self.process_ids["edex_wrapper"])[1].split('\n')[0]
                 else:
                     self.process_ids['edex_server'] = None
         return all(self.process_ids.itervalues())
@@ -301,7 +291,15 @@ class ServiceManager(object):
         logger.info(
             "%s has been processed and written to %s." % (log_file, new_log_file))
 
-    def process_all_logs(self, edex_logs):
+    def process_all_logs(self):
+        ''' Processes all EDEX logs in preparation for duplicate ingestion prevention. '''
+
+        # Build a list of all valid EDEX logs
+        edex_logs  = glob("/".join((EDEX['log_path'], "edex-ooi*.log")))
+        edex_logs += glob("/".join((EDEX['log_path'], "edex-ooi*.log.[0-9]*")))
+        edex_logs += glob("/".join((EDEX['log_path'], "*.zip")))
+        edex_logs = sorted([l for l in edex_logs if ".lck" not in l])
+
         logger.info("Pre-processing log files for duplicate searching.")
         for log_file in edex_logs:
             self.process_log(log_file)
