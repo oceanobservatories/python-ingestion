@@ -276,8 +276,8 @@ class ServiceManager(object):
             self.restart()
 
     def process_log(self, log_file):
-        result = shell.zgrep("Latency", logfile)
-        file_name = logfile.split("/")[-1]
+        result = shell.zgrep("Latency", log_file)
+        file_name = log_file.split("/")[-1]
         with open("/".join((EDEX['processed_log_path'], file_name + ".p")), "w") as outfile:
             for row in result:
                 outfile.write(row)
