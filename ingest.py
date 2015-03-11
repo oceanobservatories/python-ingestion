@@ -32,8 +32,17 @@ logger.addHandler(handler)
 logger.propagate = False
 
 def set_options(object, attrs, options):
+    defaults = {
+        'test_mode': False,
+        'force_mode': False,
+        'sleep_timer': SLEEP_TIMER,
+        'max_file_age': MAX_FILE_AGE,
+        'cooldown': EDEX['cooldown'],
+        'quick_look_quantity': None,
+        'edex_command': EDEX['command'],
+        }
     for attr in attrs:
-        setattr(object, attr, options[attr])
+        setattr(object, attr, options.get(attr, defaults[attr]))
 
 def source_env(script, update=True):
     """
@@ -55,6 +64,7 @@ class Task(object):
         'dummy',            # A dummy task. Doesn't do anything.
         'from_csv',         # Ingest from a single CSV file.
         'from_csv_batch',   # Ingest from multiple CSV files defined in a batch.
+        'pre_process_logs', # Process EDEX log files to strip out un-needed data.
         ) 
 
     def __init__(self, args):
@@ -137,6 +147,9 @@ class Task(object):
             ingest.write_failures_to_csv(
                 csv_batch.split("/")[-1].split(".")[0] + "_batch")
         return True
+
+    def pre_process_logs(self):
+        pass
 
 class ServiceManager(object):
     ''' A helper class that manages the services that the ingestion depends on.'''
@@ -259,6 +272,9 @@ class ServiceManager(object):
                 "(%s). Attempting to restart services." % previous_data_file
                 ))
             self.restart()
+
+    def process_log(self, log_file):
+        pass
 
 class Ingestor(object):
     ''' A helper class designed to handle the ingestion process.'''
