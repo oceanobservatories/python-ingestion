@@ -40,6 +40,7 @@ def set_options(object, attrs, options):
         'cooldown': EDEX['cooldown'],
         'quick_look_quantity': None,
         'edex_command': EDEX['command'],
+        'no_zip': False,
         }
     for attr in attrs:
         setattr(object, attr, options.get(attr, defaults[attr]))
