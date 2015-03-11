@@ -269,7 +269,7 @@ class ServiceManager(object):
     def process_log(self, log_file):
         ''' Processes an EDEX log and creates a new log file with only the relevant, 
             searchable data. '''
-        logger.info("Processing log file %s." % log_file)
+
         result = shell.zgrep("Latency", log_file)[1]
         new_log_file = "/".join((EDEX['processed_log_path'], log_file.split("/")[-1] + ".p"))
 
@@ -278,19 +278,21 @@ class ServiceManager(object):
             new_log_file_timestamp = datetime.datetime.fromtimestamp(os.path.getmtime(new_log_file))
             if log_file_timestamp < new_log_file_timestamp:
                 logger.info(
-                    "Log file %s has already been processed." % log_file)
+                    "%s has already been processed." % log_file)
                 return
             else:
                 logger.info((
-                    "Log file %s has already been processed, "
+                    "%s has already been processed, "
                     "but has been modified and will be re-processed."
                     ) % log_file)
         with open(new_log_file, "w") as outfile:
             for row in result:
                 outfile.write(row)
-        logger.info("Wrote new log file to %s." % new_log_file)
+        logger.info(
+            "% has been processed and written to %s." % (log_file, new_log_file))
 
     def process_all_logs(self, edex_logs):
+        logger.info("Pre-processing log files for duplicate searching.")
         for log_file in edex_logs:
             self.process_log(log_file)
         return glob("/".join((EDEX['processed_log_path'], "*.p")))
