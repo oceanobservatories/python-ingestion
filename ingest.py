@@ -349,10 +349,12 @@ class Ingestor(object):
         # Check if the data_file has previously been ingested. If it has, then skip it, unless 
         # force mode (-f) is active.
         filtered_data_files = []
+        logger.info(
+            "Determining if any files from %s have already been ingested (%s files)." % (
+                parameters['filename_mask'], len(data_files)
+                ))
         for data_file in data_files:
             file_and_queue = "%s (%s)" % (data_file, parameters['uframe_route'])
-            logger.info(
-                "Checking if %s has already been ingested." % file_and_queue)
             if in_edex_log(parameters['uframe_route'], data_file):
                 if self.force_mode:
                     logger.warning((
