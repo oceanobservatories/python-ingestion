@@ -23,6 +23,8 @@ Options:
                     The script will disregard the EDEX log file checks for already ingested data 
                     and ingest all matching files.
      --sleep=n  Override the sleep timer with a value of n seconds.
+ --startdate=d  Only ingest files newer than the specified start date d (in the YYYY-MM-DD format).
+ --startdate=d  Only ingest files older than the specified end date d (in the YYYY-MM-DD format).
        --age=n  Override the maximum age of the files to be ingested in n seconds.
   --cooldown=n  Override the EDEX service startup cooldown timer with a value of n seconds.
      --quick=n  Override the number of files per filemask to ingest. Used for quick look 
@@ -42,7 +44,7 @@ import subprocess
 import sys
 
 from time import sleep
-from config import SLEEP_TIMER, MAX_FILE_AGE, QUICK_LOOK_QUANTITY, UFRAME, EDEX
+from config import SLEEP_TIMER, MAX_FILE_AGE, START_DATE, END_DATE, QUICK_LOOK_QUANTITY, UFRAME, EDEX
 from whelk import shell, pipe
 from glob import glob
 
@@ -62,6 +64,8 @@ def set_options(object, attrs, options):
         'test_mode': False,
         'force_mode': False,
         'sleep_timer': SLEEP_TIMER,
+        'start_date': None,
+        'end_date': None,
         'max_file_age': MAX_FILE_AGE,
         'cooldown': EDEX['cooldown'],
         'quick_look_quantity': None,
@@ -93,12 +97,24 @@ class Task(object):
                 logger.error("%s must be set to an integer" % switch)
                 sys.exit(5)
 
+        def date_switch(args, switch):
+            switch = "--%s=" % switch
+            try:
+                return datetime.datetime.strptime([a for a in args if a[:len(switch)]==switch][0].split("=")[1], "%Y-%m-%d")
+            except IndexError:
+                return None
+            except ValueError:
+                logger.error("%s must be in YYYY-MM-DD format" % switch)
+                sys.exit(5)
+
         self.options = {
             'test_mode': "-t" in args, 
             'force_mode': "-f" in args,
             'commands_only': '-c' in args, 
             'sleep_timer': number_switch(args, "sleep") or SLEEP_TIMER,
             'max_file_age': number_switch(args, "age") or MAX_FILE_AGE,
+            'start_date': date_switch(args, "startdate") or START_DATE,
+            'end_date': date_switch(args, "enddate") or END_DATE,
             'cooldown': number_switch(args, "cooldown") or EDEX['cooldown'],
             'quick_look_quantity': number_switch(args, "quick") or QUICK_LOOK_QUANTITY,
             'edex_command': EDEX['command'],
@@ -108,7 +124,8 @@ class Task(object):
     def dummy(self):
         ''' A dummy task that doesn't do anything except create an Ingestor.'''
         ingest = Ingestor(**self.options)
-        logger.info("Dummy task was run.")
+        logger.info("Dummy task was run with options.")
+        logger.info(self.options)
 
     def from_csv(self):
         ''' Ingest data mapped out by a single CSV file. '''
@@ -338,9 +355,10 @@ class Ingestor(object):
     ''' A helper class designed to handle the ingestion process.'''
 
     def __init__(self, **options):
-        set_options(
-            self, 
-            ('test_mode', 'force_mode', 'sleep_timer', 'max_file_age', 'quick_look_quantity'), 
+        set_options(self, (
+                'test_mode', 'force_mode', 'sleep_timer', 
+                'start_date', 'end_date', 'max_file_age', 
+                'quick_look_quantity'), 
             options)
         self.queue = []
         self.failed_ingestions = []
@@ -365,6 +383,22 @@ class Ingestor(object):
         
         # Get a list of files that match the file mask and log the list size.
         data_files = sorted(glob(parameters['filename_mask']))
+
+        # If a start date is set, only ingest files modified after that start date.
+        if self.start_date:
+            logger.info("Start date set to %s, filtering file list." % (
+                self.start_date))
+            data_files = [
+                f for f in data_files
+                if datetime.datetime.fromtimestamp(os.path.getmtime(f)) > self.start_date]
+
+        # If a end date is set, only ingest files modified before that end date.
+        if self.end_date:
+            logger.info("end date set to %s, filtering file list." % (
+                self.end_date))
+            data_files = [
+                f for f in data_files
+                if datetime.datetime.fromtimestamp(os.path.getmtime(f)) < self.end_date]
 
         # If a maximum file age is set, only ingest files that fall within that age.
         if self.max_file_age:
