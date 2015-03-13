@@ -1,9 +1,37 @@
 #!/usr/bin/env python
-'''
+INTERNAL_DOCUMENTATION = '''
+Data Ingestion Script
 Usage: python ingest.py [task] [options]
-This script returns error codes at various points-of-failure:
-    4 - There is a problem with the EDEX server.
-    5 - An integer value was not specified for the --sleep or --new option.
+
+Tasks:
+      from_csv  Ingest data from a CSV file. 
+                Requires a filename argument with a .csv extension.
+from_csv_batch  Ingest data from multiple CSV files defined in a batch file.  
+                Requires a filename argument with a .csv.batch extension.
+         dummy  A dummy task that creates an Ingestor but doesn't try to ingest any data. 
+                Used for testing.
+
+Options:
+            -h  Display this help message.
+            -t  Test Mode. 
+                    The script will go through all of the motions of ingesting data, but will not 
+                    call any ingest sender commands.
+            -c  Commands-only Mode. 
+                    The script will output the ingest sender commands for all files in the queue, 
+                    but will not go through the ingestion process.
+            -f  Force Mode. 
+                    The script will disregard the EDEX log file checks for already ingested data 
+                    and ingest all matching files.
+     --sleep=n  Override the sleep timer with a value of n seconds.
+       --age=n  Override the maximum age of the files to be ingested in n seconds.
+  --cooldown=n  Override the EDEX service startup cooldown timer with a value of n seconds.
+     --quick=n  Override the number of files per filemask to ingest. Used for quick look 
+                ingestions.
+
+Error Codes:
+             4  There is a problem with the EDEX server.
+             5  An integer value was not specified for any of the override options.
+
 '''
 
 import csv
@@ -20,15 +48,13 @@ from glob import glob
 
 # Set up some basic logging.
 logging.basicConfig(level=logging.INFO)
-handler = logging.FileHandler(
+file_handler = logging.FileHandler(
     UFRAME['log_path'] + '/ingestion_' + datetime.datetime.today().strftime('%Y_%m_%d') + '.log'
     )
-handler.setLevel(logging.INFO)
-handler.setFormatter(
-    logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-    )
+file_handler.setLevel(logging.INFO)
+file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
 logger = logging.getLogger(__name__)
-logger.addHandler(handler)
+logger.addHandler(file_handler)
 logger.propagate = False
 
 def set_options(object, attrs, options):
@@ -49,9 +75,9 @@ class Task(object):
 
     # A list of methods on the Task class that are valid ingestion tasks.
     valid_tasks = (
-        'dummy',            # A dummy task. Doesn't do anything.
         'from_csv',         # Ingest from a single CSV file.
         'from_csv_batch',   # Ingest from multiple CSV files defined in a batch.
+        'dummy',            # A dummy task. Doesn't do anything.
         ) 
 
     def __init__(self, args):
@@ -70,6 +96,7 @@ class Task(object):
         self.options = {
             'test_mode': "-t" in args, 
             'force_mode': "-f" in args,
+            'commands_only': '-c' in args, 
             'sleep_timer': number_switch(args, "sleep") or SLEEP_TIMER,
             'max_file_age': number_switch(args, "age") or MAX_FILE_AGE,
             'cooldown': number_switch(args, "cooldown") or EDEX['cooldown'],
@@ -96,10 +123,11 @@ class Task(object):
         # Create an instance of the Ingestor class with common options set.
         ingestor = Ingestor(**self.options)
 
-        # Start the EDEX services and run the ingestion from the CSV file.
+        # Ingest from the CSV file.
         ingestor.load_queue_from_csv(csv_file)
         ingestor.write_queue_to_file()
-        ingestor.ingest_from_queue()
+        if "-c" not in self.args:
+            ingestor.ingest_from_queue()
 
         # Write out any failed ingestions to a new CSV file.
         if ingestor.failed_ingestions:
@@ -124,11 +152,12 @@ class Task(object):
         with open(csv_batch, 'r') as f:
             csv_files = [x.strip() for x in f.readlines() if x.strip()]
 
-        # Start the EDEX services and ingest from each CSV file.
+        # Ingest from each CSV file.
         for csv_file in csv_files:
             ingestor.load_queue_from_csv(csv_file)
         ingestor.write_queue_to_file()
-        ingestor.ingest_from_queue()
+        if "-c" not in self.args:
+            ingestor.ingest_from_queue()
 
         # Write out any failed ingestions from the entire batch to a new CSV file.
         if ingest.failed_ingestions:
@@ -155,7 +184,7 @@ class ServiceManager(object):
         # Source the EDEX environment.
         try:
             logger.info("Sourcing the EDEX server environment.")
-            # http://pythonwise.blogspot.fr/2010/04/sourcing-shell-script.html (Miki Tebeka)
+            # Adapted from http://pythonwise.blogspot.fr/2010/04/sourcing-shell-script.html (Miki Tebeka)
             proc = subprocess.Popen(". %s; env -0" % self.edex_command, stdout=subprocess.PIPE, shell=True)
             output = proc.communicate()[0]
             env = dict((line.split("=", 1) for line in output.split('\x00') if line))
@@ -503,6 +532,12 @@ class Ingestor(object):
             writer.writerow(f)
 
 if __name__ == '__main__':
+    # If the -h argument is passed at the command line, display the internal documentation and exit.
+    if "-h" in sys.argv:
+        sys.stdout.write(INTERNAL_DOCUMENTATION)
+        sys.exit(0)
+    
+    # Separate the task and arguments and run the task with the arguments.
     task, args = sys.argv[1], sys.argv[2:]
     perform = Task(args)
     if task in Task.valid_tasks:
