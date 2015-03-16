@@ -135,8 +135,8 @@ class Task(object):
 
     def dummy(self):
         ''' A dummy task that doesn't do anything except create an Ingestor. '''
-        ingest = Ingestor(**self.options)
-        ingest.service_manager.mailer.options_summary()
+        ingestor = Ingestor(**self.options)
+        ingestor.service_manager.mailer.options_summary()
         logger.info("Dummy task was run with options.")
         logger.info(self.options)
 
@@ -165,7 +165,7 @@ class Task(object):
                 csv_file.split("/")[-1].split(".")[0])
 
         logger.info("Ingestion completed.")
-        ingest.service_manager.mailer.ingestion_completed(csv_file)
+        ingestor.service_manager.mailer.ingestion_completed(csv_file)
         return True
 
     def from_csv_batch(self):
@@ -196,7 +196,7 @@ class Task(object):
                 csv_batch.split("/")[-1].split(".")[0] + "_batch")
 
         logger.info("Ingestion completed.")
-        ingest.service_manager.mailer.ingestion_completed(csv_batch)
+        ingestor.service_manager.mailer.ingestion_completed(csv_batch)
         return True
 
 class ServiceManager(object):
