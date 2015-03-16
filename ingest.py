@@ -42,14 +42,15 @@ import logging
 import os
 import subprocess
 import sys
-import smtplib
 
 from time import sleep
 from config import (
     SLEEP_TIMER, MAX_FILE_AGE, START_DATE, END_DATE, QUICK_LOOK_QUANTITY, 
-    UFRAME, EDEX, EMAIL)
+    UFRAME, EDEX)
 from whelk import shell, pipe
 from glob import glob
+
+import email_notifications
 
 # Set up some basic logging.
 logging.basicConfig(level=logging.INFO)
@@ -61,25 +62,6 @@ file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(mes
 logger = logging.getLogger(__name__)
 logger.addHandler(file_handler)
 logger.propagate = False
-
-EMAIL_TEMPLATE = """From: %(sender)s
-To: %(receivers)s
-Subject: %(subject)s
-
-%(message)s"""
-
-mailer = smtplib.SMTP(EMAIL['server'])
-def email_notify(subject, message):
-    mailer.sendmail(
-        EMAIL['sender'],
-        EMAIL['receivers'],
-        EMAIL_TEMPLATE % {
-            'sender': EMAIL['sender'],
-            'receivers': ", ".join(EMAIL['receivers']),
-            'subject': subject,
-            'message': message,
-            }
-        )
 
 def set_options(object, attrs, options):
     defaults = {
@@ -148,29 +130,10 @@ class Task(object):
             }
         self.args = args
 
-    def verbose_options(self):
-        v_options = []
-        if self.options['test_mode']:
-            v_options.append("Test mode is enabled.")
-        if self.options['force_mode']:
-            v_options.append("Force mode is enabled.")
-        if self.options['commands_only']:
-            v_options.append("Commands-only mode is enabled.")
-        v_options.append("Sleep timer is set to %s seconds." % self.options['sleep_timer'])
-        v_options.append("Maximum file age is set to %s seconds." % self.options['max_file_age'])
-        if self.options['start_date']:
-            v_options.append("Start date is set to %s" % self.options['start_date'].strftime("%Y-%m-%d"))
-        if self.options['end_date']:
-            v_options.append("End date is set to %s" % self.options['end_date'].strftime("%Y-%m-%d"))
-        v_options.append("EDEX service cooldown set to %s seconds." % self.options['cooldown'])
-        v_options.append("Quick look quantity set to %s." % self.options['quick_look_quantity'])
-        return "\n".join(v_options)
-        
-
     def dummy(self):
         ''' A dummy task that doesn't do anything except create an Ingestor. '''
         ingest = Ingestor(**self.options)
-        email_notify('Dummy Task', self.verbose_options())
+        email_notifications.send('Dummy Task', self.verbose_options())
         logger.info("Dummy task was run with options.")
         logger.info(self.options)
 
@@ -199,10 +162,7 @@ class Task(object):
                 csv_file.split("/")[-1].split(".")[0])
 
         logger.info("Ingestion completed.")
-        email_notify(
-            "Ingestion completed for %s" % csv_file,
-            ingestion_completed_notification % email_variables,
-            )
+        email_notifications.ingestion_completed(csv_file, self.options)
         return True
 
     def from_csv_batch(self):
@@ -233,6 +193,7 @@ class Task(object):
                 csv_batch.split("/")[-1].split(".")[0] + "_batch")
 
         logger.info("Ingestion completed.")
+        email_notifications.ingestion_completed(csv_batch, self.options)
         return True
 
 class ServiceManager(object):
@@ -353,7 +314,7 @@ class ServiceManager(object):
         while True:
             if self.refresh_status():
                 if crashed:
-                    email_notify(
+                    email_notifications.send(
                         "Service Crash During Ingestion",
                         ("One or more EDEX services crashed after ingesting the previous data file "
                         "(%s). The services were restarted successfully and ingestion will continue."

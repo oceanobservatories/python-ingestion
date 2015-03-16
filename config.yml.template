@@ -1,6 +1,8 @@
 # Default configuration for the ingestion script. 
 # Copy this file to config.yml and adjust the settings as necessary.
 
+SERVER: null
+
 SLEEP_TIMER: 3
 MAX_FILE_AGE: null
 QUICK_LOOK_QUANTITY: null
