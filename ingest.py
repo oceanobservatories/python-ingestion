@@ -22,6 +22,7 @@ Options:
             -f  Force Mode. 
                     The script will disregard the EDEX log file checks for already ingested data 
                     and ingest all matching files.
+     -no-email  Don't send email notifications.
      --sleep=n  Override the sleep timer with a value of n seconds.
  --startdate=d  Only ingest files newer than the specified start date d (in the YYYY-MM-DD format).
    --enddate=d  Only ingest files older than the specified end date d (in the YYYY-MM-DD format).
@@ -50,7 +51,7 @@ from config import (
 from whelk import shell, pipe
 from glob import glob
 
-import email_notifications
+from email_notifications import Mailer
 
 # Set up some basic logging.
 logging.basicConfig(level=logging.INFO)
@@ -74,6 +75,7 @@ def set_options(object, attrs, options):
         'cooldown': EDEX['cooldown'],
         'quick_look_quantity': None,
         'edex_command': EDEX['command'],
+        'no_email': False,
         }
     for attr in attrs:
         setattr(object, attr, options.get(attr, defaults[attr]))
@@ -120,6 +122,7 @@ class Task(object):
             'test_mode': "-t" in args, 
             'force_mode': "-f" in args,
             'commands_only': '-c' in args, 
+            'no_email': '-no-email' in args, 
             'sleep_timer': number_switch(args, "sleep") or SLEEP_TIMER,
             'max_file_age': number_switch(args, "age") or MAX_FILE_AGE,
             'start_date': date_switch(args, "startdate") or get_date(START_DATE),
@@ -133,7 +136,7 @@ class Task(object):
     def dummy(self):
         ''' A dummy task that doesn't do anything except create an Ingestor. '''
         ingest = Ingestor(**self.options)
-        email_notifications.options_summary(self.options)
+        ingest.service_manager.mailer.options_summary(self.options)
         logger.info("Dummy task was run with options.")
         logger.info(self.options)
 
@@ -162,7 +165,7 @@ class Task(object):
                 csv_file.split("/")[-1].split(".")[0])
 
         logger.info("Ingestion completed.")
-        email_notifications.ingestion_completed(csv_file, self.options)
+        ingest.service_manager.mailer.ingestion_completed(csv_file, self.options)
         return True
 
     def from_csv_batch(self):
@@ -193,7 +196,7 @@ class Task(object):
                 csv_batch.split("/")[-1].split(".")[0] + "_batch")
 
         logger.info("Ingestion completed.")
-        email_notifications.ingestion_completed(csv_batch, self.options)
+        ingest.service_manager.mailer.ingestion_completed(csv_batch, self.options)
         return True
 
 class ServiceManager(object):
@@ -225,6 +228,9 @@ class ServiceManager(object):
             sys.exit(4)
         else:
             logger.info("EDEX server environment sourced.")
+
+        # Create an email mailer.
+        self.mailer = Mailer(options)
 
     def action(self, action):
         ''' Starts or stops all services. '''
@@ -314,7 +320,7 @@ class ServiceManager(object):
         while True:
             if self.refresh_status():
                 if crashed:
-                    email_notifications.send(
+                    self.mailer.send(
                         "Service Crash During Ingestion",
                         ("One or more EDEX services crashed after ingesting the previous data file "
                         "(%s). The services were restarted successfully and ingestion will continue."
