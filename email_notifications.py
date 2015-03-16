@@ -54,7 +54,7 @@ class Mailer(object):
                     }
                 )
 
-    def ingestion_completed(ingestion_source):
+    def ingestion_completed(self, ingestion_source):
         self.send("Auto-Notification: Ingestion Completed",
             INGESTION_COMPLETE_TEMPLATE % {
                 'server': SERVER,
@@ -63,7 +63,7 @@ class Mailer(object):
                 }, 
             )
 
-    def options_summary():
+    def options_summary(self):
         self.send("Auto-Notification: Options Summary", 
             self.verbose_options,
             )
