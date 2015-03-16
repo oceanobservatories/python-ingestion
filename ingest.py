@@ -24,7 +24,7 @@ Options:
                     and ingest all matching files.
      --sleep=n  Override the sleep timer with a value of n seconds.
  --startdate=d  Only ingest files newer than the specified start date d (in the YYYY-MM-DD format).
- --startdate=d  Only ingest files older than the specified end date d (in the YYYY-MM-DD format).
+   --enddate=d  Only ingest files older than the specified end date d (in the YYYY-MM-DD format).
        --age=n  Override the maximum age of the files to be ingested in n seconds.
   --cooldown=n  Override the EDEX service startup cooldown timer with a value of n seconds.
      --quick=n  Override the number of files per filemask to ingest. Used for quick look 
