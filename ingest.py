@@ -170,7 +170,7 @@ class Task(object):
     def dummy(self):
         ''' A dummy task that doesn't do anything except create an Ingestor. '''
         ingest = Ingestor(**self.options)
-        email_notify('Dummy Task', self.verbose_options)
+        email_notify('Dummy Task', self.verbose_options())
         logger.info("Dummy task was run with options.")
         logger.info(self.options)
 
