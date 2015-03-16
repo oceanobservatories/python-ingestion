@@ -17,3 +17,9 @@ EDEX:
     processed_log_path: ./processed_edex_logs/
     test_mode: False
     cooldown: 60
+
+EMAIL: 
+    sender: ruig@ooi.rutgers.edu
+    receivers:
+        - ruig@ooi.rutgers.edu
+    server: localhost

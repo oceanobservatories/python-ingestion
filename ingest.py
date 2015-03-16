@@ -42,9 +42,12 @@ import logging
 import os
 import subprocess
 import sys
+import smtplib
 
 from time import sleep
-from config import SLEEP_TIMER, MAX_FILE_AGE, START_DATE, END_DATE, QUICK_LOOK_QUANTITY, UFRAME, EDEX
+from config import (
+    SLEEP_TIMER, MAX_FILE_AGE, START_DATE, END_DATE, QUICK_LOOK_QUANTITY, 
+    UFRAME, EDEX, EMAIL)
 from whelk import shell, pipe
 from glob import glob
 
@@ -58,6 +61,25 @@ file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(mes
 logger = logging.getLogger(__name__)
 logger.addHandler(file_handler)
 logger.propagate = False
+
+EMAIL_TEMPLATE = """From: %(sender)s
+To: %(receivers)s
+Subject: %(subject)s
+
+%(message)s"""
+
+mailer = smtplib.SMTP(EMAIL['server'])
+def email_notify(subject, message):
+    mailer.sendmail(
+        EMAIL['sender'],
+        EMAIL['receivers'],
+        EMAIL_TEMPLATE % {
+            'sender': EMAIL['sender'],
+            'receivers': ", ".join(EMAIL['receivers']),
+            'subject': subject,
+            'message': message,
+            }
+        )
 
 def set_options(object, attrs, options):
     defaults = {
@@ -100,7 +122,8 @@ class Task(object):
         def date_switch(args, switch):
             switch = "--%s=" % switch
             try:
-                return datetime.datetime.strptime([a for a in args if a[:len(switch)]==switch][0].split("=")[1], "%Y-%m-%d")
+                return datetime.datetime.strptime(
+                    [a for a in args if a[:len(switch)]==switch][0].split("=")[1], "%Y-%m-%d")
             except IndexError:
                 return None
             except ValueError:
@@ -124,6 +147,7 @@ class Task(object):
     def dummy(self):
         ''' A dummy task that doesn't do anything except create an Ingestor.'''
         ingest = Ingestor(**self.options)
+        email_notify('Dummy Task', self.options)
         logger.info("Dummy task was run with options.")
         logger.info(self.options)
 
@@ -201,8 +225,9 @@ class ServiceManager(object):
         # Source the EDEX environment.
         try:
             logger.info("Sourcing the EDEX server environment.")
-            # Adapted from http://pythonwise.blogspot.fr/2010/04/sourcing-shell-script.html (Miki Tebeka)
-            proc = subprocess.Popen(". %s; env -0" % self.edex_command, stdout=subprocess.PIPE, shell=True)
+            # Adapted from http://pythonwise.blogspot.fr/2010/04/sourcing-shell-script.html
+            proc = subprocess.Popen(
+                ". %s; env -0" % self.edex_command, stdout=subprocess.PIPE, shell=True)
             output = proc.communicate()[0]
             env = dict((line.split("=", 1) for line in output.split('\x00') if line))
             os.environ.update(env)
@@ -264,7 +289,7 @@ class ServiceManager(object):
         self.process_ids = {}
         try:
             if self.test_mode:
-                status = "edex_ooi:   632\npostgres:   732\nqpidd:   845\npypies: 948 7803 7943 7944 7945 8037 8142 8143 8144\n"
+                status = "edex_ooi:   632\npostgres:   732\nqpidd:   845\npypies: 948 7803 \n"
             else:
                 status = subprocess.check_output([self.edex_command, "all", "status"])
         except Exception:
@@ -534,8 +559,9 @@ class Ingestor(object):
 
     def write_queue_to_file(self, command_file=None):
         ''' Write the ingestion command for each file to be ingested to a log file. '''
+        today_string = datetime.datetime.today().strftime('%Y_%m_%d_%H_%M')
         commands_file = command_file or \
-            UFRAME['log_path'] + '/commands_' + datetime.datetime.today().strftime('%Y_%m_%d_%H_%M') + '.log'
+            UFRAME['log_path'] + '/commands_' + today_string + '.log'
         with open(commands_file, 'w') as outfile:
             for batch in self.queue:
                 for data_file in batch['data_files']:
