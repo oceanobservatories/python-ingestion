@@ -205,6 +205,10 @@ class ServiceManager(object):
     def __init__(self, **options):
         set_options(self, ('test_mode', 'edex_command', 'cooldown'), options)
 
+        # Create an email mailer.
+        self.mailer = Mailer(options)
+
+        # Process all logs.
         self.edex_log_files = self.process_all_logs()
 
         # Source the EDEX server environment.
@@ -228,9 +232,6 @@ class ServiceManager(object):
             sys.exit(4)
         else:
             logger.info("EDEX server environment sourced.")
-
-        # Create an email mailer.
-        self.mailer = Mailer(options)
 
     def action(self, action):
         ''' Starts or stops all services. '''
