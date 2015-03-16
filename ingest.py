@@ -119,11 +119,15 @@ class Task(object):
                 logger.error("%s must be set to an integer" % switch)
                 sys.exit(5)
 
+        def get_date(date_string):
+            if date_string:
+                return datetime.datetime.strptime(date_string, "%Y-%m-%d")
+            return None
+
         def date_switch(args, switch):
             switch = "--%s=" % switch
             try:
-                return datetime.datetime.strptime(
-                    [a for a in args if a[:len(switch)]==switch][0].split("=")[1], "%Y-%m-%d")
+                return get_date([a for a in args if a[:len(switch)]==switch][0].split("=")[1])
             except IndexError:
                 return None
             except ValueError:
@@ -136,18 +140,37 @@ class Task(object):
             'commands_only': '-c' in args, 
             'sleep_timer': number_switch(args, "sleep") or SLEEP_TIMER,
             'max_file_age': number_switch(args, "age") or MAX_FILE_AGE,
-            'start_date': date_switch(args, "startdate") or START_DATE,
-            'end_date': date_switch(args, "enddate") or END_DATE,
+            'start_date': date_switch(args, "startdate") or get_date(START_DATE),
+            'end_date': date_switch(args, "enddate") or get_date(END_DATE),
             'cooldown': number_switch(args, "cooldown") or EDEX['cooldown'],
             'quick_look_quantity': number_switch(args, "quick") or QUICK_LOOK_QUANTITY,
             'edex_command': EDEX['command'],
             }
         self.args = args
 
+    def verbose_options(self):
+        v_options = []
+        if self.options['test_mode']:
+            v_options.append("Test mode is enabled.")
+        if self.options['force_mode']:
+            v_options.append("Force mode is enabled.")
+        if self.options['commands_only']:
+            v_options.append("Commands-only mode is enabled.")
+        v_options.append("Sleep timer is set to %s seconds." % self.options['sleep_timer'])
+        v_options.append("Maximum file age is set to %s seconds." % self.options['max_file_age'])
+        if self.options['start_date']:
+            v_options.append("Start date is set to %s" % self.options['start_date'].strftime("%Y-%m-%d"))
+        if self.options['end_date']:
+            v_options.append("End date is set to %s" % self.options['end_date'].strftime("%Y-%m-%d"))
+        v_options.append("EDEX service cooldown set to %s seconds." % self.options['cooldown'])
+        v_options.append("Quick look quantity set to %s." % self.options['quick_look_quantity'])
+        return "\n".join(v_options)
+        
+
     def dummy(self):
-        ''' A dummy task that doesn't do anything except create an Ingestor.'''
+        ''' A dummy task that doesn't do anything except create an Ingestor. '''
         ingest = Ingestor(**self.options)
-        email_notify('Dummy Task', self.options)
+        email_notify('Dummy Task', self.verbose_options)
         logger.info("Dummy task was run with options.")
         logger.info(self.options)
 
@@ -176,6 +199,10 @@ class Task(object):
                 csv_file.split("/")[-1].split(".")[0])
 
         logger.info("Ingestion completed.")
+        email_notify(
+            "Ingestion completed for %s" % csv_file,
+            ingestion_completed_notification % email_variables,
+            )
         return True
 
     def from_csv_batch(self):
@@ -320,15 +347,24 @@ class ServiceManager(object):
                     self.process_ids['edex_server'] = None
         return all(self.process_ids.itervalues())
 
-    def wait_until_ready(self):
+    def wait_until_ready(self, previous_data_file):
         ''' Sits in a loop until all services are up and running. '''
+        crashed = False
         while True:
             if self.refresh_status():
+                if crashed:
+                    email_notify(
+                        "Service Crash During Ingestion",
+                        ("One or more EDEX services crashed after ingesting the previous data file "
+                        "(%s). The services were restarted successfully and ingestion will continue."
+                        ) % previous_data_file, 
+                        )
                 return
             logger.warn((
                 "One or more EDEX services crashed after ingesting the previous data file "
                 "(%s). Attempting to restart services." % previous_data_file
                 ))
+            crashed = True
             self.restart()
 
     def process_log(self, log_file):
@@ -499,7 +535,7 @@ class Ingestor(object):
         previous_data_file = ""
         for data_file in data_files:
             # Check if the EDEX services are still running. If not, attempt to restart them.
-            self.service_manager.wait_until_ready()
+            self.service_manager.wait_until_ready(previous_data_file)
 
             ingestion_command = (
                 UFRAME['command'], uframe_route, data_file, reference_designator, data_source)
