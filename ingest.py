@@ -17,8 +17,8 @@ Options:
                     The script will go through all of the motions of ingesting data, but will not 
                     call any ingest sender commands.
             -c  Commands-only Mode. 
-                    The script will output the ingest sender commands for all files in the queue, 
-                    but will not go through the ingestion process.
+                    The script will write the ingest sender commands to a file for all files in 
+                    the queue, but will not go through the ingestion process.
             -f  Force Mode. 
                     The script will disregard the EDEX log file checks for already ingested data 
                     and ingest all matching files.
@@ -93,29 +93,23 @@ class Task(object):
     def __init__(self, args):
         ''' Parse and interpret common command-line options.'''
 
-        def number_switch(args, switch):
-            switch = "--%s=" % switch
-            try:
-                return int([a for a in args if a[:len(switch)]==switch][0].split("=")[1])
-            except IndexError:
-                return None
-            except ValueError:
-                logger.error("%s must be set to an integer" % switch)
-                sys.exit(5)
-
         def get_date(date_string):
             if date_string:
                 return datetime.datetime.strptime(date_string, "%Y-%m-%d")
             return None
 
-        def date_switch(args, switch):
+        def switch_value(switch, converter):
+            value_error_messages = {
+                int: "%s must be set to an integer" % switch,
+                get_date: "%s must be in YYYY-MM-DD format" % switch,
+                }
             switch = "--%s=" % switch
             try:
-                return get_date([a for a in args if a[:len(switch)]==switch][0].split("=")[1])
+                return converter([a for a in args if a[:len(switch)]==switch][0].split("=")[1])
             except IndexError:
                 return None
             except ValueError:
-                logger.error("%s must be in YYYY-MM-DD format" % switch)
+                logger.error(value_error_messages[converter])
                 sys.exit(5)
 
         self.options = {
@@ -123,12 +117,12 @@ class Task(object):
             'force_mode': "-f" in args,
             'commands_only': '-c' in args, 
             'no_email': '-no-email' in args, 
-            'sleep_timer': number_switch(args, "sleep") or SLEEP_TIMER,
-            'max_file_age': number_switch(args, "age") or MAX_FILE_AGE,
-            'start_date': date_switch(args, "startdate") or get_date(START_DATE),
-            'end_date': date_switch(args, "enddate") or get_date(END_DATE),
-            'cooldown': number_switch(args, "cooldown") or EDEX['cooldown'],
-            'quick_look_quantity': number_switch(args, "quick") or QUICK_LOOK_QUANTITY,
+            'sleep_timer': switch_value("sleep", int) or SLEEP_TIMER,
+            'max_file_age': switch_value("age", int) or MAX_FILE_AGE,
+            'start_date': switch_value("startdate", get_date) or get_date(START_DATE),
+            'end_date': switch_value("enddate", get_date) or get_date(END_DATE),
+            'cooldown': switch_value("cooldown", int) or EDEX['cooldown'],
+            'quick_look_quantity': switch_value("quick", int) or QUICK_LOOK_QUANTITY,
             'edex_command': EDEX['command'],
             }
         self.args = args
@@ -392,15 +386,15 @@ class Ingestor(object):
         self.queue = []
         self.failed_ingestions = []
 
-        ''' Instantiate a ServiceManager for this Ingestor object and start the services if any are
-            not running. '''
+        ''' Instantiate a ServiceManager for this Ingestor and start the services if any are not 
+            running. '''
         self.service_manager = options.get('service_manager', ServiceManager(**options))
         if not self.service_manager.refresh_status():
             self.service_manager.action("start")
 
     def load_queue(self, parameters):
-        ''' Finds the files that match the filename_mask parameter and loads them into the 
-            Ingestor object's queue. '''
+        ''' Finds the files that match the filename_mask parameter and loads them into the Ingestor
+            object's queue. '''
 
         def in_edex_log(uframe_route, datafile):
             ''' Check EDEX logs to see if the file has been ingested by EDEX.'''

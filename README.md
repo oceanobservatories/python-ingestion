@@ -5,22 +5,40 @@ Python scripts for ingestion of UFrame data.
 
     python ingest.py [task] [options]
 
-**Tasks**
+**Documentation**
 
-| Task           | Description |
-| -------------- | ----------- |
-| from_csv       | Ingest data based on parameters stored in a CSV file. Takes a *file* argument. Contains the filename masks, uframe routes, reference designators, and data sources. This file must have the .csv extension. |
-| from_csv_batch | Ingest data from multiple CSV files. Takes a *file* argument. Contains the filenames of CSV files that will be ingested. This file must have a .csv.batch extension.|
-| dummy          | A dummy task that only instantiates an Ingestor object. |
+	Data Ingestion Script
+	Usage: python ingest.py [task] [options]
 
-**Options**
+	Tasks:
+	      from_csv  Ingest data from a CSV file. 
+			Requires a filename argument with a .csv extension.
+	from_csv_batch  Ingest data from multiple CSV files defined in a batch file.  
+			Requires a filename argument with a .csv.batch extension.
+		 dummy  A dummy task that creates an Ingestor but doesn't try to ingest any data. 
+			Used for testing.
 
-| Switch          | Description |
-| --------------- | ----------- |
-| -t              | puts the script in test mode. No data will actually be ingested.|
-| -f              | forces the script to disregard the EDEX log file checks for already ingested data. |
-| -c              | writes ingestion commands to a file without running ingestion. |
-| --sleep=*n*     | overrides the sleep timer with a value of *n* seconds. |
-| --age=*n*       | overrides the maximum age of the files to be ingested in *n* seconds. |
-| --cooldown=*n*  | overrides the EDEX service startup cooldown timer with a value of *n* seconds. |
-| --quick=*n*     | overrides the number of files per filemask to ingest. Used for quick look ingestions. |
+	Options:
+		    -h  Display this help message.
+		    -t  Test Mode. 
+			    The script will go through all of the motions of ingesting data, but will not 
+			    call any ingest sender commands.
+		    -c  Commands-only Mode. 
+			    The script will write the ingest sender commands to a file for all files in 
+			    the queue, but will not go through the ingestion process.
+		    -f  Force Mode. 
+			    The script will disregard the EDEX log file checks for already ingested data 
+			    and ingest all matching files.
+	     -no-email  Don't send email notifications.
+	     --sleep=n  Override the sleep timer with a value of n seconds.
+	 --startdate=d  Only ingest files newer than the specified start date d (in the YYYY-MM-DD format).
+	   --enddate=d  Only ingest files older than the specified end date d (in the YYYY-MM-DD format).
+	       --age=n  Override the maximum age of the files to be ingested in n seconds.
+	  --cooldown=n  Override the EDEX service startup cooldown timer with a value of n seconds.
+	     --quick=n  Override the number of files per filemask to ingest. Used for quick look 
+			ingestions.
+
+	Error Codes:
+		     4  There is a problem with the EDEX server.
+		     5  An integer value was not specified for any of the override options.
+

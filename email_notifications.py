@@ -19,7 +19,7 @@ The ingestion was run with the following options:
 class Mailer(object):
     def __init__(self, options):
         self.mailer = smtplib.SMTP(EMAIL['server'])
-        self.no_email = options['no_email']
+        self.no_email = options.get('no_email', False)
 
         self.verbose_options = []
         if options['test_mode']:
@@ -28,31 +28,40 @@ class Mailer(object):
             self.verbose_options.append("Force mode is enabled.")
         if options['commands_only']:
             self.verbose_options.append("Commands-only mode is enabled.")
-        self.verbose_options.append("Sleep timer is set to %s seconds." % options['sleep_timer'])
+        self.verbose_options.append(
+            "Sleep timer is set to %s seconds." % options['sleep_timer'])
         if options['max_file_age']:
-            self.verbose_options.append("Maximum file age is set to %s seconds." % options['max_file_age'])
+            self.verbose_options.append(
+                "Maximum file age is set to %s seconds." % options['max_file_age'])
         if options['start_date']:
-            self.verbose_options.append("Start date is set to %s" % options['start_date'].strftime("%Y-%m-%d"))
+            self.verbose_options.append(
+                "Start date is set to %s" % options['start_date'].strftime("%Y-%m-%d"))
         if options['end_date']:
-            self.verbose_options.append("End date is set to %s" % options['end_date'].strftime("%Y-%m-%d"))
-        self.verbose_options.append("EDEX service cooldown set to %s seconds." % options['cooldown'])
+            self.verbose_options.append(
+                "End date is set to %s" % options['end_date'].strftime("%Y-%m-%d"))
+        self.verbose_options.append(
+            "EDEX service cooldown set to %s seconds." % options['cooldown'])
         if options['quick_look_quantity']:
-            self.verbose_options.append("Quick look quantity set to %s." % options['quick_look_quantity'])
+            self.verbose_options.append(
+                "Quick look quantity set to %s." % options['quick_look_quantity'])
         self.verbose_options = "\n".join(self.verbose_options)
 
     def send(self, subject, message):
         if not self.no_email:
-            self.mailer.sendmail(
-                EMAIL['sender'],
-                EMAIL['receivers'],
-                BASE_TEMPLATE % {
-                    'sender': EMAIL['sender'],
-                    'receivers': ", ".join(EMAIL['receivers']),
-                    'subject': subject,
-                    'message': message,
-                    'server': SERVER, 
-                    }
-                )
+            try:
+                self.mailer.sendmail(
+                    EMAIL['sender'],
+                    EMAIL['receivers'],
+                    BASE_TEMPLATE % {
+                        'sender': EMAIL['sender'],
+                        'receivers': ", ".join(EMAIL['receivers']),
+                        'subject': subject,
+                        'message': message,
+                        'server': SERVER, 
+                        }
+                    )
+            except:
+                pass
 
     def ingestion_completed(self, ingestion_source):
         self.send("Auto-Notification: Ingestion Completed",
