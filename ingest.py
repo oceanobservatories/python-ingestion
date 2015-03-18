@@ -4,42 +4,44 @@ Data Ingestion Script
 Usage: python ingest.py [task] [options]
 
 Tasks:
-      from_csv  Ingest data from a CSV file. 
-                Requires a filename argument with a .csv extension.
-from_csv_batch  Ingest data from multiple CSV files defined in a batch file.  
-                Requires a filename argument with a .csv.batch extension.
-         dummy  A dummy task that creates an Ingestor but doesn't try to ingest any data. 
-                Used for testing.
+          from_csv  Ingest data from a CSV file. 
+                    Requires a filename argument with a .csv extension.
+    from_csv_batch  Ingest data from multiple CSV files defined in a batch file.  
+                    Requires a filename argument with a .csv.batch extension.
+             dummy  A dummy task that creates an Ingestor but doesn't try to ingest any data. 
+                    Used for testing.
 
 Options:
-            -h  Display this help message.
-            -t  Test Mode. 
-                    The script will go through all of the motions of ingesting data, but will not 
-                    call any ingest sender commands.
-            -c  Commands-only Mode. 
-                    The script will write the ingest sender commands to a file for all files in 
-                    the queue, but will not go through the ingestion process.
-            -f  Force Mode. 
-                    The script will disregard the EDEX log file checks for already ingested data 
-                    and ingest all matching files.
-     -no-email  Don't send email notifications.
-     --sleep=n  Override the sleep timer with a value of n seconds.
- --startdate=d  Only ingest files newer than the specified start date d (in the YYYY-MM-DD format).
-   --enddate=d  Only ingest files older than the specified end date d (in the YYYY-MM-DD format).
-       --age=n  Override the maximum age of the files to be ingested in n seconds.
-  --cooldown=n  Override the EDEX service startup cooldown timer with a value of n seconds.
-     --quick=n  Override the number of files per filemask to ingest. Used for quick look 
-                ingestions.
+                -h  Display this help message.
+                -t  Test Mode. 
+                        The script will go through all of the motions of ingesting data, but will 
+                        not call any ingest sender commands.
+                -c  Commands-only Mode. 
+                        The script will write the ingest sender commands to a file for all files in 
+                        the queue, but will not go through the ingestion process.
+                -f  Force Mode. 
+                        The script will disregard the EDEX log file checks for already ingested 
+                        data and ingest all matching files.
+         -no-email  Don't send email notifications.
+         --sleep=n  Override the sleep timer with a value of n seconds.
+     --startdate=d  Only ingest files newer than the specified start date d (in the YYYY-MM-DD 
+                    format).
+       --enddate=d  Only ingest files older than the specified end date d (in the YYYY-MM-DD 
+                    format).
+           --age=n  Override the maximum age of the files to be ingested in n seconds.
+      --cooldown=n  Override the EDEX service startup cooldown timer with a value of n seconds.
+         --quick=n  Override the number of files per filemask to ingest. Used for quick look 
+                    ingestions.
 
 Error Codes:
-             4  There is a problem with the EDEX server.
-             5  An integer value was not specified for any of the override options.
+                 4  There is a problem with the EDEX server.
+                 5  An integer value was not specified for any of the override options.
 
 '''
 
 import csv
-import datetime
-import logging
+from datetime import datetime, timedelta
+import logging, logging.config
 import os
 import subprocess
 import sys
@@ -54,15 +56,38 @@ from glob import glob
 from email_notifications import Mailer
 
 # Set up some basic logging.
-logging.basicConfig(level=logging.INFO)
-file_handler = logging.FileHandler(
-    UFRAME['log_path'] + '/ingestion_' + datetime.datetime.today().strftime('%Y_%m_%d') + '.log'
-    )
-file_handler.setLevel(logging.INFO)
-file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+logging_config = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'simple': {
+            'format': '%(asctime)s - %(levelname)-5s - %(message)s',
+            },
+        },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'level': 'ERROR',
+            'formatter': 'simple',
+            'stream': 'ext://sys.stdout',
+            },
+        'file_handler': {
+            'class': 'logging.FileHandler',
+            'level': 'INFO',
+            'formatter': 'simple',
+            'filename': UFRAME['log_path'] + datetime.today().strftime('/ingestion_%Y_%m_%d.log'),
+            },
+        },
+    'loggers': {
+        '': {
+            'level': 'INFO',
+            'handlers': ['console', 'file_handler'],
+            'propagate': False,
+            },
+        },
+    }
 logger = logging.getLogger(__name__)
-logger.addHandler(file_handler)
-logger.propagate = False
+logging.config.dictConfig(logging_config)
 
 def set_options(object, attrs, options):
     defaults = {
@@ -95,7 +120,7 @@ class Task(object):
 
         def get_date(date_string):
             if date_string:
-                return datetime.datetime.strptime(date_string, "%Y-%m-%d")
+                return datetime.strptime(date_string, "%Y-%m-%d")
             return None
 
         def switch_value(switch, converter):
@@ -158,6 +183,7 @@ class Task(object):
             ingestor.write_failures_to_csv(
                 csv_file.split("/")[-1].split(".")[0])
 
+        logger.info('')
         logger.info("Ingestion completed.")
         ingestor.service_manager.mailer.ingestion_completed(csv_file)
         return True
@@ -189,6 +215,7 @@ class Task(object):
             ingest.write_failures_to_csv(
                 csv_batch.split("/")[-1].split(".")[0] + "_batch")
 
+        logger.info('')
         logger.info("Ingestion completed.")
         ingestor.service_manager.mailer.ingestion_completed(csv_batch)
         return True
@@ -229,12 +256,12 @@ class ServiceManager(object):
 
     def action(self, action):
         ''' Starts or stops all services. '''
-        verbose_action = {'start': 'start', 'stop': 'stopp'}[action]
         
         # Check if the action is valid.
         if action not in ("start", "stop"):
             logger.error("% is not a valid action" % action.title())
             sys.exit(4)
+        verbose_action = {'start': 'start', 'stop': 'stopp'}[action]
 
         logger.info("%sing all services." % verbose_action.title())
         command = [self.edex_command, "all", action]
@@ -278,7 +305,7 @@ class ServiceManager(object):
         self.process_ids = {}
         try:
             if self.test_mode:
-                status = "edex_ooi:   632\npostgres:   732\nqpidd:   845\npypies: 948 7803 \n"
+                status = "edex_ooi:    654\npostgres:   732\nqpidd:   845\npypies: 948 7803 \n"
             else:
                 status = subprocess.check_output([self.edex_command, "all", "status"])
         except Exception:
@@ -297,14 +324,14 @@ class ServiceManager(object):
 
             ''' Determine the child processes for edex_ooi to get the actual PID of the EDEX 
                 application. '''
+            def child_process(parent_name):
+                return shell.pgrep("-P", self.process_ids[parent_name])[1].split('\n')[0]
             if self.test_mode:
                 self.process_ids['edex_wrapper'], self.process_ids['edex_server'] = "test", "test"
             else:
-                self.process_ids['edex_wrapper'] = \
-                    shell.pgrep("-P", self.process_ids["edex_ooi"])[1].split('\n')[0]
+                self.process_ids['edex_wrapper'] = child_process("edex_ooi")
                 if self.process_ids['edex_wrapper']:
-                    self.process_ids['edex_server'] = \
-                        shell.pgrep("-P", self.process_ids["edex_wrapper"])[1].split('\n')[0]
+                    self.process_ids['edex_server'] = child_process("edex_wrapper")
                 else:
                     self.process_ids['edex_server'] = None
         return all(self.process_ids.itervalues())
@@ -337,9 +364,9 @@ class ServiceManager(object):
 
         # Check to see if the processed log file already exists.
         if os.path.isfile(new_log_file):
-            log_file_timestamp = datetime.datetime.fromtimestamp(
+            log_file_timestamp = datetime.fromtimestamp(
                 os.path.getmtime(log_file))
-            new_log_file_timestamp = datetime.datetime.fromtimestamp(
+            new_log_file_timestamp = datetime.fromtimestamp(
                 os.path.getmtime(new_log_file))
             ''' Check to see if the original log file has been modified since being previously 
                 processed. '''
@@ -407,13 +434,18 @@ class Ingestor(object):
         # Get a list of files that match the file mask and log the list size.
         data_files = sorted(glob(parameters['filename_mask']))
 
+        logger.info('')
+        logger.info(
+            "%s file(s) found for %s before filtering." % (
+                len(data_files), parameters['filename_mask']))
+
         # If a start date is set, only ingest files modified after that start date.
         if self.start_date:
             logger.info("Start date set to %s, filtering file list." % (
                 self.start_date))
             data_files = [
                 f for f in data_files
-                if datetime.datetime.fromtimestamp(os.path.getmtime(f)) > self.start_date]
+                if datetime.fromtimestamp(os.path.getmtime(f)) > self.start_date]
 
         # If a end date is set, only ingest files modified before that end date.
         if self.end_date:
@@ -421,21 +453,17 @@ class Ingestor(object):
                 self.end_date))
             data_files = [
                 f for f in data_files
-                if datetime.datetime.fromtimestamp(os.path.getmtime(f)) < self.end_date]
+                if datetime.fromtimestamp(os.path.getmtime(f)) < self.end_date]
 
         # If a maximum file age is set, only ingest files that fall within that age.
         if self.max_file_age:
             logger.info("Maximum file age set to %s seconds, filtering file list." % (
                 self.max_file_age))
-            current_time = datetime.datetime.now()
-            age = datetime.timedelta(seconds=self.max_file_age)
+            current_time = datetime.now()
+            age = timedelta(seconds=self.max_file_age)
             data_files = [
                 f for f in data_files
-                if current_time - datetime.datetime.fromtimestamp(os.path.getmtime(f)) < age]
-
-        logger.info(
-            "%s file(s) found for %s before filtering." % (
-                len(data_files), parameters['filename_mask']))
+                if current_time - datetime.fromtimestamp(os.path.getmtime(f)) < age]
 
         # Check if the data_file has previously been ingested. If it has, then skip it, unless 
         # force mode (-f) is active.
@@ -478,6 +506,24 @@ class Ingestor(object):
 
         parameters['data_files'] = filtered_data_files
         self.queue.append(parameters)
+
+    def load_queue_from_csv(self, csv_file):
+        ''' Reads the specified CSV file for mask, route, designator, and source parameters and 
+            loads the Ingestor object's queue with a batch with those matching parameters.'''
+
+        try:
+            reader = csv.DictReader(open(csv_file))
+        except IOError:
+            logger.error("%s not found." % csv_file)
+            return False
+        fieldnames = ['uframe_route', 'filename_mask', 'reference_designator', 'data_source']
+        if reader.fieldnames != fieldnames:
+            logger.error("%s does not have valid column headers." % csv_file)
+            return False
+
+        # Load the queue with parameters from each row.
+        for row in reader:
+            self.load_queue(row)
 
     def send(self, data_files, uframe_route, reference_designator, data_source):
         ''' Calls UFrame's ingest sender application with the appropriate command-line arguments 
@@ -528,28 +574,11 @@ class Ingestor(object):
             sleep(self.sleep_timer)
         return True
 
-    def load_queue_from_csv(self, csv_file):
-        ''' Reads the specified CSV file for mask, route, designator, and source parameters and 
-            loads the Ingestor object's queue with a batch with those matching parameters.'''
-
-        try:
-            reader = csv.DictReader(open(csv_file))
-        except IOError:
-            logger.error("%s not found." % csv_file)
-            return False
-        fieldnames = ['uframe_route', 'filename_mask', 'reference_designator', 'data_source']
-        if reader.fieldnames != fieldnames:
-            logger.error("%s does not have valid column headers." % csv_file)
-            return False
-
-        # Load the queue with parameters from each row.
-        for row in reader:
-            self.load_queue(row)
-
     def ingest_from_queue(self):
         ''' Call the ingestion command for each batch of files in the Ingestor object's queue. '''
         for batch in self.queue:
             filename_mask = batch.pop('filename_mask')
+            logger.info('')
             logger.info(
                 "Ingesting %s files for %s from the queue." % (
                     len(batch['data_files']), filename_mask))
@@ -557,7 +586,7 @@ class Ingestor(object):
 
     def write_queue_to_file(self, command_file=None):
         ''' Write the ingestion command for each file to be ingested to a log file. '''
-        today_string = datetime.datetime.today().strftime('%Y_%m_%d_%H_%M')
+        today_string = datetime.today().strftime('%Y_%m_%d_%H_%M')
         commands_file = command_file or \
             UFRAME['log_path'] + '/commands_' + today_string + '.log'
         with open(commands_file, 'w') as outfile:
@@ -570,12 +599,13 @@ class Ingestor(object):
                         batch['reference_designator'], 
                         batch['data_source'])) + "\n"
                     outfile.write(ingestion_command)
-        logger.info('Wrote queue to %s.' % commands_file)
+        logger.info('')
+        logger.info('Wrote ingestion commands for files in queue to %s.' % commands_file)
 
     def write_failures_to_csv(self, label):
         ''' Write any failed ingestions out into a CSV file that can be re-ingested later. '''
 
-        date_string = datetime.datetime.today().strftime('%Y_%m_%d')
+        date_string = datetime.today().strftime('%Y_%m_%d')
         fieldnames = ['uframe_route', 'filename_mask', 'reference_designator', 'data_source']
         outfile = "%s/failed_ingestions_%s_%s.csv" % (
             UFRAME["failed_ingestion_path"], label, date_string)
