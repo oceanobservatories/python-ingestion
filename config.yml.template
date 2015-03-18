@@ -22,7 +22,9 @@ EDEX:
     cooldown: 60
 
 EMAIL: 
+    enabled: False
     sender: ruig@ooi.rutgers.edu
     receivers:
         - ruig@ooi.rutgers.edu
     server: localhost
+    port: 1025

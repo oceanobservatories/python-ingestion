@@ -39,55 +39,71 @@ Error Codes:
 
 '''
 
+import sys, os, subprocess
+import logging, logging.config
+import mailinglogger
 import csv
 from datetime import datetime, timedelta
-import logging, logging.config
-import os
-import subprocess
-import sys
-
 from time import sleep
-from config import (
-    SLEEP_TIMER, MAX_FILE_AGE, START_DATE, END_DATE, QUICK_LOOK_QUANTITY, 
-    UFRAME, EDEX)
-from whelk import shell, pipe
 from glob import glob
+from whelk import shell, pipe
+
+from config import (
+    SERVER, SLEEP_TIMER, 
+    MAX_FILE_AGE, START_DATE, END_DATE, QUICK_LOOK_QUANTITY, 
+    UFRAME, EDEX, EMAIL)
 
 from email_notifications import Mailer
 
-# Set up some basic logging.
+# Set up logging.
 logging_config = {
     'version': 1,
     'disable_existing_loggers': False,
     'formatters': {
         'simple': {
-            'format': '%(asctime)s - %(levelname)-5s - %(message)s',
+            'format': '%(levelname)-5s | %(asctime)s | %(name)-8s | %(message)s',
             },
+        'email': {
+            'format': '%(asctime)s - %(name)s: %(message)s'
+            },
+        'raw': {
+            'format': '%(message)s',
+            }
         },
     'handlers': {
-        'console': {
-            'class': 'logging.StreamHandler',
-            'level': 'ERROR',
-            'formatter': 'simple',
-            'stream': 'ext://sys.stdout',
-            },
         'file_handler': {
             'class': 'logging.FileHandler',
             'level': 'INFO',
             'formatter': 'simple',
             'filename': UFRAME['log_path'] + datetime.today().strftime('/ingestion_%Y_%m_%d.log'),
             },
+        'errors_to_console': {
+            'class': 'logging.StreamHandler',
+            'level': 'ERROR',
+            'formatter': 'raw',
+            'stream': 'ext://sys.stdout',
+            },
+        'errors_to_email': {
+            'class': 'mailinglogger.SummarisingLogger',
+            'level': 'ERROR',
+            'mailhost': (EMAIL['server'], EMAIL['port']),
+            'fromaddr': EMAIL['sender'],
+            'toaddrs': EMAIL['receivers'],
+            'subject': '[OOI-RUIG] Auto-Notification: Ingestion Error(s) (%s)' % SERVER,
+            'template': ('This is an automatically generated notification. '
+                'The following errors occurred while running the ingestion script:\n\n%s'),
+            'send_empty_entries': False,
+            'formatter': 'email',
+            }
         },
     'loggers': {
         '': {
             'level': 'INFO',
-            'handlers': ['console', 'file_handler'],
+            'handlers': ['file_handler', 'errors_to_console', ],
             'propagate': False,
             },
         },
     }
-logger = logging.getLogger(__name__)
-logging.config.dictConfig(logging_config)
 
 def set_options(object, attrs, options):
     defaults = {
@@ -118,6 +134,8 @@ class Task(object):
     def __init__(self, args):
         ''' Parse and interpret common command-line options.'''
 
+        self.logger = logging.getLogger('Task')
+
         def get_date(date_string):
             if date_string:
                 return datetime.strptime(date_string, "%Y-%m-%d")
@@ -134,7 +152,7 @@ class Task(object):
             except IndexError:
                 return None
             except ValueError:
-                logger.error(value_error_messages[converter])
+                self.logger.error(value_error_messages[converter])
                 sys.exit(5)
 
         self.options = {
@@ -151,13 +169,17 @@ class Task(object):
             'edex_command': EDEX['command'],
             }
         self.args = args
+    
+        # Create a Mailer for non-logging based email notifications.
+        self.mailer = Mailer(self.options)
 
     def dummy(self):
         ''' A dummy task that doesn't do anything except create an Ingestor. '''
         ingestor = Ingestor(**self.options)
-        ingestor.service_manager.mailer.options_summary()
-        logger.info("Dummy task was run with options.")
-        logger.info(self.options)
+        self.mailer.options_summary()
+        self.logger.info("Dummy task was run with the following options:")
+        for option in sorted(["%s: %s" % (o, self.options[o]) for o in self.options]):
+            self.logger.info(option)
 
     def from_csv(self):
         ''' Ingest data mapped out by a single CSV file. '''
@@ -166,7 +188,7 @@ class Task(object):
         try:
             csv_file = [f for f in self.args if f[-4:].lower()==".csv"][0]
         except IndexError:
-            logger.error("No mapping CSV specified.")
+            self.logger.error("No mapping CSV specified.")
             return False
 
         # Create an instance of the Ingestor class with common options set.
@@ -183,9 +205,9 @@ class Task(object):
             ingestor.write_failures_to_csv(
                 csv_file.split("/")[-1].split(".")[0])
 
-        logger.info('')
-        logger.info("Ingestion completed.")
-        ingestor.service_manager.mailer.ingestion_completed(csv_file)
+        self.logger.info('')
+        self.logger.info("Ingestion completed.")
+        self.mailer.ingestion_completed(csv_file)
         return True
 
     def from_csv_batch(self):
@@ -198,7 +220,7 @@ class Task(object):
         try:
             csv_batch = [f for f in self.args if f[-10:].lower()==".csv.batch"][0]
         except IndexError:
-            logger.error("No CSV batch file specified.")
+            self.logger.error("No CSV batch file specified.")
             return False
         with open(csv_batch, 'r') as f:
             csv_files = [x.strip() for x in f.readlines() if x.strip()]
@@ -215,9 +237,9 @@ class Task(object):
             ingest.write_failures_to_csv(
                 csv_batch.split("/")[-1].split(".")[0] + "_batch")
 
-        logger.info('')
-        logger.info("Ingestion completed.")
-        ingestor.service_manager.mailer.ingestion_completed(csv_batch)
+        self.logger.info('')
+        self.logger.info("Ingestion completed.")
+        self.mailer.ingestion_completed(csv_batch)
         return True
 
 class ServiceManager(object):
@@ -226,21 +248,20 @@ class ServiceManager(object):
     def __init__(self, **options):
         set_options(self, ('test_mode', 'edex_command', 'cooldown'), options)
 
-        # Create an email mailer.
-        self.mailer = Mailer(options)
+        self.logger = logging.getLogger('Services')
 
         # Process all logs.
         self.edex_log_files = self.process_all_logs()
 
         # Source the EDEX server environment.
         if self.test_mode or EDEX['test_mode']:
-            logger.info("TEST MODE: Sourcing the EDEX server environment.")
-            logger.info("TEST MODE: EDEX server environment sourced.")
+            self.logger.info("TEST MODE: Sourcing the EDEX server environment.")
+            self.logger.info("TEST MODE: EDEX server environment sourced.")
             return
 
         # Source the EDEX environment.
         try:
-            logger.info("Sourcing the EDEX server environment.")
+            self.logger.info("Sourcing the EDEX server environment.")
             # Adapted from http://pythonwise.blogspot.fr/2010/04/sourcing-shell-script.html
             proc = subprocess.Popen(
                 ". %s; env -0" % self.edex_command, stdout=subprocess.PIPE, shell=True)
@@ -248,32 +269,32 @@ class ServiceManager(object):
             env = dict((line.split("=", 1) for line in output.split('\x00') if line))
             os.environ.update(env)
         except Exception:
-            logger.exception(
+            self.logger.exception(
                 "An error occurred when sourcing the EDEX server environment.")
             sys.exit(4)
         else:
-            logger.info("EDEX server environment sourced.")
+            self.logger.info("EDEX server environment sourced.")
 
     def action(self, action):
         ''' Starts or stops all services. '''
         
         # Check if the action is valid.
         if action not in ("start", "stop"):
-            logger.error("% is not a valid action" % action.title())
+            self.logger.error("% is not a valid action" % action.title())
             sys.exit(4)
         verbose_action = {'start': 'start', 'stop': 'stopp'}[action]
 
-        logger.info("%sing all services." % verbose_action.title())
+        self.logger.info("%sing all services." % verbose_action.title())
         command = [self.edex_command, "all", action]
         command_string = " ".join(command)
         try:
             if self.test_mode:
-                logger.info("TEST MODE: " + command_string)
+                self.logger.info("TEST MODE: " + command_string)
             else:
-                logger.info(command_string)
+                self.logger.info(command_string)
                 subprocess.check_output(command)
         except Exception:
-            logger.exception(
+            self.logger.exception(
                 "An error occurred when %sing services." % verbose_action)
             sys.exit(4)
         else:
@@ -281,16 +302,16 @@ class ServiceManager(object):
                 setting from the config file specifies how long to wait before continuing the 
                 script.'''
             if action == "start":
-                logger.info("Waiting specified cooldown time (%s seconds)" % self.cooldown)
+                self.logger.info("Waiting specified cooldown time (%s seconds)" % self.cooldown)
                 sleep(self.cooldown)
 
             # Check to see if all processes were started or stopped, and exit if there's an issue.
-            logger.info("Checking service statuses and refreshing process IDs.")
+            self.logger.info("Checking service statuses and refreshing process IDs.")
             if self.refresh_status() == {'start': True, 'stop': False}[action]:
-                logger.info("All services %sed." % verbose_action)
+                self.logger.info("All services %sed." % verbose_action)
             else:
-                logger.error("There was an issue %sing the services." % verbose_action)
-                logger.error(self.process_ids)
+                self.logger.error("There was an issue %sing the services." % verbose_action)
+                self.logger.error(self.process_ids)
                 sys.exit(4)
 
     def restart(self):
@@ -305,11 +326,11 @@ class ServiceManager(object):
         self.process_ids = {}
         try:
             if self.test_mode:
-                status = "edex_ooi:    654\npostgres:   732\nqpidd:   845\npypies: 948 7803 \n"
+                status = "edex_ooi:     654\npostgres:   732\nqpidd:   845\npypies: 948 7803 \n"
             else:
                 status = subprocess.check_output([self.edex_command, "all", "status"])
         except Exception:
-            logger.exception(
+            self.logger.exception(
                 "An error occurred when checking the service statuses.")
             sys.exit(4)
         else:
@@ -342,14 +363,12 @@ class ServiceManager(object):
         while True:
             if self.refresh_status():
                 if crashed:
-                    self.mailer.send(
-                        "Service Crash During Ingestion",
-                        ("One or more EDEX services crashed after ingesting the previous data file "
+                    self.logger.error((
+                        "One or more EDEX services crashed after ingesting the previous data file "
                         "(%s). The services were restarted successfully and ingestion will continue."
-                        ) % previous_data_file, 
-                        )
+                        ) % previous_data_file)
                 return
-            logger.warn((
+            self.logger.warn((
                 "One or more EDEX services crashed after ingesting the previous data file "
                 "(%s). Attempting to restart services." % previous_data_file
                 ))
@@ -371,11 +390,11 @@ class ServiceManager(object):
             ''' Check to see if the original log file has been modified since being previously 
                 processed. '''
             if log_file_timestamp < new_log_file_timestamp:
-                logger.info(
+                self.logger.info(
                     "%s has already been processed." % log_file)
                 return
             else:
-                logger.info((
+                self.logger.info((
                     "%s has already been processed, "
                     "but has been modified and will be re-processed."
                     ) % log_file)
@@ -384,7 +403,7 @@ class ServiceManager(object):
         with open(new_log_file, "w") as outfile:
             for row in result:
                 outfile.write(row)
-        logger.info(
+        self.logger.info(
             "%s has been processed and written to %s." % (log_file, new_log_file))
 
     def process_all_logs(self):
@@ -396,7 +415,7 @@ class ServiceManager(object):
         edex_logs += glob("/".join((EDEX['log_path'], "*.zip")))
         edex_logs = sorted([l for l in edex_logs if ".lck" not in l])
 
-        logger.info("Pre-processing log files for duplicate searching.")
+        self.logger.info("Pre-processing log files for duplicate searching.")
         for log_file in edex_logs:
             self.process_log(log_file)
         return glob("/".join((EDEX['processed_log_path'], "*.p")))
@@ -405,6 +424,8 @@ class Ingestor(object):
     ''' A helper class designed to handle the ingestion process.'''
 
     def __init__(self, **options):
+        self.logger = logging.getLogger('Ingestor')
+
         set_options(self, (
                 'test_mode', 'force_mode', 'sleep_timer', 
                 'start_date', 'end_date', 'max_file_age', 
@@ -434,14 +455,14 @@ class Ingestor(object):
         # Get a list of files that match the file mask and log the list size.
         data_files = sorted(glob(parameters['filename_mask']))
 
-        logger.info('')
-        logger.info(
+        self.logger.info('')
+        self.logger.info(
             "%s file(s) found for %s before filtering." % (
                 len(data_files), parameters['filename_mask']))
 
         # If a start date is set, only ingest files modified after that start date.
         if self.start_date:
-            logger.info("Start date set to %s, filtering file list." % (
+            self.logger.info("Start date set to %s, filtering file list." % (
                 self.start_date))
             data_files = [
                 f for f in data_files
@@ -449,7 +470,7 @@ class Ingestor(object):
 
         # If a end date is set, only ingest files modified before that end date.
         if self.end_date:
-            logger.info("end date set to %s, filtering file list." % (
+            self.logger.info("end date set to %s, filtering file list." % (
                 self.end_date))
             data_files = [
                 f for f in data_files
@@ -457,7 +478,7 @@ class Ingestor(object):
 
         # If a maximum file age is set, only ingest files that fall within that age.
         if self.max_file_age:
-            logger.info("Maximum file age set to %s seconds, filtering file list." % (
+            self.logger.info("Maximum file age set to %s seconds, filtering file list." % (
                 self.max_file_age))
             current_time = datetime.now()
             age = timedelta(seconds=self.max_file_age)
@@ -468,18 +489,18 @@ class Ingestor(object):
         # Check if the data_file has previously been ingested. If it has, then skip it, unless 
         # force mode (-f) is active.
         filtered_data_files = []
-        logger.info(
+        self.logger.info(
             "Determining if any files have already been ingested to %s." % parameters['uframe_route'])
         for data_file in data_files:
             file_and_queue = "%s (%s)" % (data_file, parameters['uframe_route'])
             if in_edex_log(parameters['uframe_route'], data_file):
                 if self.force_mode:
-                    logger.warning((
+                    self.logger.warning((
                         "EDEX logs indicate that %s has already been ingested, "
                         "but force mode (-f) is active. The file will be reingested."
                         ) % file_and_queue)
                 else:
-                    logger.warning((
+                    self.logger.warning((
                         "EDEX logs indicate that %s has already been ingested. "
                         "The file will not be reingested."
                         ) % file_and_queue)
@@ -496,11 +517,11 @@ class Ingestor(object):
         if self.quick_look_quantity and self.quick_look_quantity < len(filtered_data_files):
             before_quick_look = len(filtered_data_files)
             filtered_data_files = filtered_data_files[:self.quick_look_quantity]
-            logger.info(
+            self.logger.info(
                 "%s of %s file(s) from %s set for quick look ingestion." % (
                     len(filtered_data_files), before_quick_look, parameters['filename_mask']))
         else:
-            logger.info(
+            self.logger.info(
                 "%s file(s) from %s set for ingestion." % (
                     len(filtered_data_files), parameters['filename_mask']))
 
@@ -514,11 +535,11 @@ class Ingestor(object):
         try:
             reader = csv.DictReader(open(csv_file))
         except IOError:
-            logger.error("%s not found." % csv_file)
+            self.logger.error("%s not found." % csv_file)
             return False
         fieldnames = ['uframe_route', 'filename_mask', 'reference_designator', 'data_source']
         if reader.fieldnames != fieldnames:
-            logger.error("%s does not have valid column headers." % csv_file)
+            self.logger.error("%s does not have valid column headers." % csv_file)
             return False
 
         # Load the queue with parameters from each row.
@@ -556,20 +577,20 @@ class Ingestor(object):
                     subprocess.check_output(ingestion_command)
             except subprocess.CalledProcessError as e:
                 # If UFrame's ingest sender fails and returns a non-zero exit code, log it.
-                logger.error(
+                self.logger.error(
                     "There was a problem with UFrame when ingesting %s (Error code %s)." % (
                         data_file, e.returncode))
                 self.failed_ingestions.append(
                     annotate_parameters(data_file, uframe_route, reference_designator, data_source))
             except Exception:
                 # If there is some other system issue, log it with traceback.
-                logger.exception(
+                self.logger.exception(
                     "There was an unexpected system error when ingesting %s" % data_file)
                 self.failed_ingestions.append(
                     annotate_parameters(data_file, uframe_route, reference_designator, data_source))
             else:
                 # If there are no errors, consider the ingest send a success and log it.
-                logger.info(ingestion_command_string)
+                self.logger.info(ingestion_command_string)
             previous_data_file = data_file
             sleep(self.sleep_timer)
         return True
@@ -578,8 +599,8 @@ class Ingestor(object):
         ''' Call the ingestion command for each batch of files in the Ingestor object's queue. '''
         for batch in self.queue:
             filename_mask = batch.pop('filename_mask')
-            logger.info('')
-            logger.info(
+            self.logger.info('')
+            self.logger.info(
                 "Ingesting %s files for %s from the queue." % (
                     len(batch['data_files']), filename_mask))
             self.send(**batch)
@@ -599,8 +620,8 @@ class Ingestor(object):
                         batch['reference_designator'], 
                         batch['data_source'])) + "\n"
                     outfile.write(ingestion_command)
-        logger.info('')
-        logger.info('Wrote ingestion commands for files in queue to %s.' % commands_file)
+        self.logger.info('')
+        self.logger.info('Wrote ingestion commands for files in queue to %s.' % commands_file)
 
     def write_failures_to_csv(self, label):
         ''' Write any failed ingestions out into a CSV file that can be re-ingested later. '''
@@ -613,7 +634,7 @@ class Ingestor(object):
         writer = csv.DictWriter(
             open(outfile, 'wb'), delimiter=',', fieldnames=fieldnames)
 
-        logger.info(
+        self.logger.info(
             "Writing %s failed ingestion(s) out to %s" % (len(self.failed_ingestions), outfile))
         writer.writerow(dict((fn,fn) for fn in fieldnames))
         for f in self.failed_ingestions:
@@ -624,7 +645,14 @@ if __name__ == '__main__':
     if "-h" in sys.argv:
         sys.stdout.write(INTERNAL_DOCUMENTATION)
         sys.exit(0)
-    
+
+    # Setup Logging
+    if "-no-email" not in sys.argv:
+        if EMAIL['enabled']:
+            logging_config['loggers']['']['handlers'] += ['errors_to_email']
+    logging.config.dictConfig(logging_config)
+    logger = logging.getLogger('Main')
+
     # Separate the task and arguments and run the task with the arguments.
     task, args = sys.argv[1], sys.argv[2:]
     perform = Task(args)
