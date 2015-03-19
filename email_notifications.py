@@ -1,5 +1,6 @@
 import smtplib
 from config import EMAIL, SERVER
+import logging
 
 BASE_TEMPLATE = """From: %(sender)s
 To: %(receivers)s
@@ -17,10 +18,15 @@ The ingestion was run with the following options:
 """
 
 class Mailer(object):
+    ''' A wrapper class for smtplib's sendmail function. Used for sending email notifications that 
+        need to be more verbose than log-file output. '''
+
     def __init__(self, options):
+        self.logger = logging.getLogger('Mailer')
         self.mailer = smtplib.SMTP(EMAIL['server'], EMAIL['port'])
         self.no_email = options.get('no_email', False)
 
+        # Create a readible version of the script's options.
         self.verbose_options = []
         if options['test_mode']:
             self.verbose_options.append("Test mode is enabled.")
@@ -47,6 +53,8 @@ class Mailer(object):
         self.verbose_options = "\n".join(self.verbose_options)
 
     def send(self, subject, message):
+        ''' Wraps sendmail with some baseline configuration, and also checks the config and 
+            command-line options to see if email is allowed to be sent. '''
         if not self.no_email:
             if EMAIL['enabled']:
                 try:
@@ -59,10 +67,13 @@ class Mailer(object):
                             'subject': subject,
                             'message': message,
                             'server': SERVER, 
-                            }
-                        )
+                            })
                 except:
-                    pass
+                    self.logger.exception("There was an error sending email.")
+                    return False
+                self.logger.info("A notification email has been sent (%s)." % subject)
+                return True
+        self.logger.warn("Email is disabled; no notifications sent.")
 
     def ingestion_completed(self, ingestion_source):
         self.send("Auto-Notification: Ingestion Completed",
@@ -74,6 +85,4 @@ class Mailer(object):
             )
 
     def options_summary(self):
-        self.send("Auto-Notification: Options Summary", 
-            self.verbose_options,
-            )
+        self.send("Auto-Notification: Options Summary", self.verbose_options)

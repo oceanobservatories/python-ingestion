@@ -40,8 +40,7 @@ Error Codes:
 '''
 
 import sys, os, subprocess
-import logging, logging.config
-import mailinglogger
+import logging, logging.config, mailinglogger
 import csv
 from datetime import datetime, timedelta
 from time import sleep
@@ -53,57 +52,8 @@ from config import (
     MAX_FILE_AGE, START_DATE, END_DATE, QUICK_LOOK_QUANTITY, 
     UFRAME, EDEX, EMAIL)
 
-from email_notifications import Mailer
-
-# Set up logging.
-logging_config = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'formatters': {
-        'simple': {
-            'format': '%(levelname)-5s | %(asctime)s | %(name)-8s | %(message)s',
-            },
-        'email': {
-            'format': '%(asctime)s - %(name)s: %(message)s'
-            },
-        'raw': {
-            'format': '%(message)s',
-            }
-        },
-    'handlers': {
-        'file_handler': {
-            'class': 'logging.FileHandler',
-            'level': 'INFO',
-            'formatter': 'simple',
-            'filename': UFRAME['log_path'] + datetime.today().strftime('/ingestion_%Y_%m_%d.log'),
-            },
-        'errors_to_console': {
-            'class': 'logging.StreamHandler',
-            'level': 'ERROR',
-            'formatter': 'raw',
-            'stream': 'ext://sys.stdout',
-            },
-        'errors_to_email': {
-            'class': 'mailinglogger.SummarisingLogger',
-            'level': 'ERROR',
-            'mailhost': (EMAIL['server'], EMAIL['port']),
-            'fromaddr': EMAIL['sender'],
-            'toaddrs': EMAIL['receivers'],
-            'subject': '[OOI-RUIG] Auto-Notification: Ingestion Error(s) (%s)' % SERVER,
-            'template': ('This is an automatically generated notification. '
-                'The following errors occurred while running the ingestion script:\n\n%s'),
-            'send_empty_entries': False,
-            'formatter': 'email',
-            }
-        },
-    'loggers': {
-        '': {
-            'level': 'INFO',
-            'handlers': ['file_handler', 'errors_to_console', ],
-            'propagate': False,
-            },
-        },
-    }
+import logger
+import email_notifications
 
 def set_options(object, attrs, options):
     defaults = {
@@ -171,15 +121,17 @@ class Task(object):
         self.args = args
     
         # Create a Mailer for non-logging based email notifications.
-        self.mailer = Mailer(self.options)
+        self.mailer = email_notifications.Mailer(self.options)
 
     def dummy(self):
-        ''' A dummy task that doesn't do anything except create an Ingestor. '''
+        ''' The dummy task is used for testing basic initialization functions. It creates an 
+            Ingestor (which in turn creates a ServiceManager) and outputs all of the script's 
+            options to the log and sends an email notification with the same information. '''
         ingestor = Ingestor(**self.options)
-        self.mailer.options_summary()
         self.logger.info("Dummy task was run with the following options:")
         for option in sorted(["%s: %s" % (o, self.options[o]) for o in self.options]):
             self.logger.info(option)
+        self.mailer.options_summary()
 
     def from_csv(self):
         ''' Ingest data mapped out by a single CSV file. '''
@@ -197,7 +149,7 @@ class Task(object):
         # Ingest from the CSV file.
         ingestor.load_queue_from_csv(csv_file)
         ingestor.write_queue_to_file()
-        if "-c" not in self.args:
+        if not self.options['commands_only']:
             ingestor.ingest_from_queue()
 
         # Write out any failed ingestions to a new CSV file.
@@ -229,7 +181,7 @@ class Task(object):
         for csv_file in csv_files:
             ingestor.load_queue_from_csv(csv_file)
         ingestor.write_queue_to_file()
-        if "-c" not in self.args:
+        if not self.options['commands_only']:
             ingestor.ingest_from_queue()
 
         # Write out any failed ingestions from the entire batch to a new CSV file.
@@ -649,8 +601,8 @@ if __name__ == '__main__':
     # Setup Logging
     if "-no-email" not in sys.argv:
         if EMAIL['enabled']:
-            logging_config['loggers']['']['handlers'] += ['errors_to_email']
-    logging.config.dictConfig(logging_config)
+            logger.LOGGING_CONFIG['loggers']['']['handlers'] += ['errors_to_email']
+    logging.config.dictConfig(logger.LOGGING_CONFIG)
     logger = logging.getLogger('Main')
 
     # Separate the task and arguments and run the task with the arguments.
@@ -667,4 +619,6 @@ if __name__ == '__main__':
             logger.exception("There was an unexpected error.")
     else:
         logger.error("%s is not a valid ingestion task." % task)
-    
+else:
+    if EMAIL['enabled']:
+        logger.LOGGING_CONFIG['loggers']['']['handlers'] += ['errors_to_email']
