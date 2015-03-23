@@ -24,11 +24,10 @@ class Mailer(object):
     def __init__(self, options):
         self.logger = logging.getLogger('Mailer')
         self.no_email = options.get('no_email', False)
+        self.mailer = None
         if not self.no_email:
             if EMAIL['enabled']:
                 self.mailer = smtplib.SMTP(EMAIL['server'], EMAIL['port'])
-        else:
-            self.mailer = None
 
         # Create a readible version of the script's options.
         self.verbose_options = []
