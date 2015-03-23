@@ -7,7 +7,7 @@ LOGGING_CONFIG = {
     'disable_existing_loggers': False,
     'formatters': {
         'simple': {
-            'format': '%(levelname)-5s | %(asctime)s | %(name)-8s | %(message)s',
+            'format': '%(levelname)-7s | %(asctime)s | %(name)-8s | %(message)s',
             },
         'email': {
             'format': '%(asctime)s - %(name)s: %(message)s'
