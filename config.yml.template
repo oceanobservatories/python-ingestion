@@ -18,7 +18,7 @@ EDEX:
     command: /home/developer/uframes/ooi/bin/edex-server
     log_path: /home/developer/uframes/ooi/uframe-1.0/edex/logs/
     processed_log_path: ./processed_edex_logs/
-    test_mode: False
+    fake_source: False
     cooldown: 60
 
 EMAIL: 

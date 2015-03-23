@@ -71,6 +71,11 @@ def set_options(object, attrs, options):
     for attr in attrs:
         setattr(object, attr, options.get(attr, defaults[attr]))
 
+def log_and_exit(error_code):
+    logger.error("Script exited with error code %s." % error_code)
+    logger.info("-")
+    sys.exit(error_code)
+
 class Task(object):
     ''' A helper class designed to manage the different types of ingestion tasks.'''
 
@@ -103,7 +108,7 @@ class Task(object):
                 return None
             except ValueError:
                 self.logger.error(value_error_messages[converter])
-                sys.exit(5)
+                log_and_exit(5)
 
         self.options = {
             'test_mode': "-t" in args, 
@@ -206,7 +211,7 @@ class ServiceManager(object):
         self.edex_log_files = self.process_all_logs()
 
         # Source the EDEX server environment.
-        if self.test_mode or EDEX['test_mode']:
+        if self.test_mode or EDEX['fake_source']:
             self.logger.info("TEST MODE: Sourcing the EDEX server environment.")
             self.logger.info("TEST MODE: EDEX server environment sourced.")
             return
@@ -223,7 +228,7 @@ class ServiceManager(object):
         except Exception:
             self.logger.exception(
                 "An error occurred when sourcing the EDEX server environment.")
-            sys.exit(4)
+            log_and_exit(4)
         else:
             self.logger.info("EDEX server environment sourced.")
 
@@ -233,7 +238,7 @@ class ServiceManager(object):
         # Check if the action is valid.
         if action not in ("start", "stop"):
             self.logger.error("% is not a valid action" % action.title())
-            sys.exit(4)
+            log_and_exit(4)
         verbose_action = {'start': 'start', 'stop': 'stopp'}[action]
 
         self.logger.info("%sing all services." % verbose_action.title())
@@ -248,7 +253,7 @@ class ServiceManager(object):
         except Exception:
             self.logger.exception(
                 "An error occurred when %sing services." % verbose_action)
-            sys.exit(4)
+            log_and_exit(4)
         else:
             ''' When EDEX is started, it takes some time for the service to be ready. A cooldown 
                 setting from the config file specifies how long to wait before continuing the 
@@ -264,7 +269,7 @@ class ServiceManager(object):
             else:
                 self.logger.error("There was an issue %sing the services." % verbose_action)
                 self.logger.error(self.process_ids)
-                sys.exit(4)
+                log_and_exit(4)
 
     def restart(self):
         ''' Restart all services.'''
@@ -278,13 +283,13 @@ class ServiceManager(object):
         self.process_ids = {}
         try:
             if self.test_mode:
-                status = "edex_ooi:     654\npostgres:   732\nqpidd:   845\npypies: 948 7803 \n"
+                status = "edex_ooi: test\npostgres: test\nqpidd: test\npypies: test test \n"
             else:
                 status = subprocess.check_output([self.edex_command, "all", "status"])
         except Exception:
             self.logger.exception(
                 "An error occurred when checking the service statuses.")
-            sys.exit(4)
+            log_and_exit(4)
         else:
             # Parse and process the output of 'edex-server all status' into a dict.
             status = [s.strip() for s in status.split('\n') if s.strip()]
@@ -596,7 +601,7 @@ if __name__ == '__main__':
     # If the -h argument is passed at the command line, display the internal documentation and exit.
     if "-h" in sys.argv:
         sys.stdout.write(INTERNAL_DOCUMENTATION)
-        sys.exit(0)
+        log_and_exit(0)
 
     # Setup Logging
     if "-no-email" not in sys.argv:

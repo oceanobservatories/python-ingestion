@@ -23,8 +23,12 @@ class Mailer(object):
 
     def __init__(self, options):
         self.logger = logging.getLogger('Mailer')
-        self.mailer = smtplib.SMTP(EMAIL['server'], EMAIL['port'])
         self.no_email = options.get('no_email', False)
+        if not self.no_email:
+            if EMAIL['enabled']:
+                self.mailer = smtplib.SMTP(EMAIL['server'], EMAIL['port'])
+        else:
+            self.mailer = None
 
         # Create a readible version of the script's options.
         self.verbose_options = []
@@ -55,24 +59,23 @@ class Mailer(object):
     def send(self, subject, message):
         ''' Wraps sendmail with some baseline configuration, and also checks the config and 
             command-line options to see if email is allowed to be sent. '''
-        if not self.no_email:
-            if EMAIL['enabled']:
-                try:
-                    self.mailer.sendmail(
-                        EMAIL['sender'],
-                        EMAIL['receivers'],
-                        BASE_TEMPLATE % {
-                            'sender': EMAIL['sender'],
-                            'receivers': ", ".join(EMAIL['receivers']),
-                            'subject': subject,
-                            'message': message,
-                            'server': SERVER, 
-                            })
-                except:
-                    self.logger.exception("There was an error sending email.")
-                    return False
-                self.logger.info("A notification email has been sent (%s)." % subject)
-                return True
+        if self.mailer:
+            try:
+                self.mailer.sendmail(
+                    EMAIL['sender'],
+                    EMAIL['receivers'],
+                    BASE_TEMPLATE % {
+                        'sender': EMAIL['sender'],
+                        'receivers': ", ".join(EMAIL['receivers']),
+                        'subject': subject,
+                        'message': message,
+                        'server': SERVER, 
+                        })
+            except:
+                self.logger.exception("There was an error sending email.")
+                return False
+            self.logger.info("A notification email has been sent (%s)." % subject)
+            return True
         self.logger.warn("Email is disabled; no notifications sent.")
 
     def ingestion_completed(self, ingestion_source):
