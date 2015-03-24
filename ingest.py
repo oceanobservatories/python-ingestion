@@ -190,8 +190,8 @@ class Task(object):
             ingestor.ingest_from_queue()
 
         # Write out any failed ingestions from the entire batch to a new CSV file.
-        if ingest.failed_ingestions:
-            ingest.write_failures_to_csv(
+        if ingestor.failed_ingestions:
+            ingestor.write_failures_to_csv(
                 csv_batch.split("/")[-1].split(".")[0] + "_batch")
 
         self.logger.info('')
@@ -603,27 +603,31 @@ if __name__ == '__main__':
         sys.stdout.write(INTERNAL_DOCUMENTATION)
         log_and_exit(0)
 
-    # Setup Logging
-    if "-no-email" not in sys.argv:
-        if EMAIL['enabled']:
-            logger.LOGGING_CONFIG['loggers']['']['handlers'] += ['errors_to_email']
-    logging.config.dictConfig(logger.LOGGING_CONFIG)
-    logger = logging.getLogger('Main')
-
-    # Separate the task and arguments and run the task with the arguments.
+    # Separate the task and arguments.
     task, args = sys.argv[1], sys.argv[2:]
+
+    # Setup Logging
+    log_file_name = "_".join((
+        "ingestion", task, datetime.today().strftime('%Y_%m_%d_%H_%M_%S'),
+        )) + ".log"
+    logger.setup_logging(
+        log_file_name=log_file_name,
+        send_mail="-no-email" not in args and EMAIL['enabled'])
+    main_logger = logging.getLogger('Main')
+    
+    # Run the task with the arguments.
     perform = Task(args)
     if task in Task.valid_tasks:
-        logger.info("-")
-        logger.info(
+        main_logger.info("-")
+        main_logger.info(
             "Running ingestion task '%s' with command-line arguments '%s'" % (
                 task, " ".join(args)))
         try:
             getattr(perform, task)()
         except Exception:
-            logger.exception("There was an unexpected error.")
+            main_logger.exception("There was an unexpected error.")
     else:
-        logger.error("%s is not a valid ingestion task." % task)
+        main_logger.error("%s is not a valid ingestion task." % task)
 else:
     if EMAIL['enabled']:
-        logger.LOGGING_CONFIG['loggers']['']['handlers'] += ['errors_to_email']
+        main_logger.LOGGING_CONFIG['loggers']['']['handlers'] += ['errors_to_email']
