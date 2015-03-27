@@ -155,7 +155,8 @@ class Task(object):
 
         # Ingest from the CSV file.
         ingestor.load_queue_from_csv(csv_file)
-        ingestor.write_queue_to_file()
+        ingestor.write_queue_to_file(
+            csv_file.split("/")[-1].split(".")[0])
         if not self.options['commands_only']:
             ingestor.ingest_from_queue()
 
@@ -187,7 +188,8 @@ class Task(object):
         # Ingest from each CSV file.
         for csv_file in csv_files:
             ingestor.load_queue_from_csv(csv_file)
-        ingestor.write_queue_to_file()
+        ingestor.write_queue_to_file(
+            csv_batch.split("/")[-1].split(".")[0] + "_batch")
         if not self.options['commands_only']:
             ingestor.ingest_from_queue()
 
@@ -571,9 +573,12 @@ class Ingestor(object):
 
     def write_queue_to_file(self, command_file=None):
         ''' Write the ingestion command for each file to be ingested to a log file. '''
-        today_string = datetime.today().strftime('%Y_%m_%d_%H_%M')
-        commands_file = command_file or \
-            UFRAME['log_path'] + '/commands_' + today_string + '.log'
+        today_string = datetime.today().strftime('%Y_%m_%d_%H_%M_%S')
+        if command_file:
+            commands_file = "_".join(("commands", command_file, today_string)) + '.log'
+        else:
+            commands_file = 'commands_' + today_string + '.log'
+        commands_file = "/".join((UFRAME['log_path'], commands_file))
         with open(commands_file, 'w') as outfile:
             for batch in self.queue:
                 for data_file in batch['data_files']:
