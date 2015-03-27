@@ -412,6 +412,10 @@ class Ingestor(object):
         # Get a list of files that match the file mask and log the list size.
         data_files = sorted(glob(parameters['filename_mask']))
 
+        # Grab the deployment number.
+        # The filename mask structure might change pending decision from the MIOs.
+        parameters['deployment_number'] = int(parameters['filename_mask'].split("/")[5][1:])
+
         self.logger.info('')
         self.logger.info(
             "%s file(s) found for %s before filtering." % (
@@ -503,7 +507,7 @@ class Ingestor(object):
         for row in reader:
             self.load_queue(row)
 
-    def send(self, data_files, uframe_route, reference_designator, data_source):
+    def send(self, data_files, uframe_route, reference_designator, data_source, deployment_number):
         ''' Calls UFrame's ingest sender application with the appropriate command-line arguments 
             for all files specified in the data_files list. '''
 
@@ -524,7 +528,7 @@ class Ingestor(object):
             self.service_manager.wait_until_ready(previous_data_file)
 
             ingestion_command = (
-                UFRAME['command'], uframe_route, data_file, reference_designator, data_source)
+                UFRAME['command'], uframe_route, data_file, reference_designator, data_source, deployment_number)
             try:
                 # Attempt to send the file to UFrame's ingest sender.
                 ingestion_command_string = " ".join(ingestion_command)
@@ -575,7 +579,9 @@ class Ingestor(object):
                         batch['uframe_route'], 
                         data_file, 
                         batch['reference_designator'], 
-                        batch['data_source'])) + "\n"
+                        batch['data_source'],
+                        str(batch['deployment_number']),
+                        )) + "\n"
                     outfile.write(ingestion_command)
         self.logger.info('')
         self.logger.info('Wrote ingestion commands for files in queue to %s.' % commands_file)
@@ -584,7 +590,7 @@ class Ingestor(object):
         ''' Write any failed ingestions out into a CSV file that can be re-ingested later. '''
 
         date_string = datetime.today().strftime('%Y_%m_%d')
-        fieldnames = ['uframe_route', 'filename_mask', 'reference_designator', 'data_source']
+        fieldnames = ['uframe_route', 'filename_mask', 'reference_designator', 'data_source', 'deployment_number']
         outfile = "%s/failed_ingestions_%s_%s.csv" % (
             UFRAME["failed_ingestion_path"], label, date_string)
 
