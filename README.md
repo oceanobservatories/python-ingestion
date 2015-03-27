@@ -7,7 +7,9 @@ Create a virutalenv (https://virtualenv.pypa.io/en/latest/) and install the libr
 
     pip install -r requirements.txt
     
-Copy the config.yml.template to config.yml and edit the new config.yml file to specify the correct paths for the variosu configuration options.
+Copy the config.yml.template to config.yml and edit the new config.yml file to specify the correct paths for the various configuration options. Use the comments in the config.yml file as a guide and create any directories as necessary. Whenever possible, use absolute paths.
+
+Command line options override options set in the config.yml file.
 
     Usage: python ingest.py [task] [options]
 
