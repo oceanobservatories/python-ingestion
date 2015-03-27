@@ -1,6 +1,14 @@
 # python-ingestion
 Python scripts for ingestion of UFrame data.
 
+Requires Python 2.7.x
+
+Create a virutalenv (https://virtualenv.pypa.io/en/latest/) and install the libraries using pip:
+
+    pip install -r requirements.txt
+    
+Copy the config.yml.template to config.yml and edit the new config.yml file to specify the correct paths for the variosu configuration options.
+
     Usage: python ingest.py [task] [options]
 
     Tasks:
