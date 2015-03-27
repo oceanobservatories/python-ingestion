@@ -356,7 +356,7 @@ class ServiceManager(object):
                     "but has been modified and will be re-processed."
                     ) % log_file)
 
-        result = shell.zgrep("Latency", log_file)[1]
+        result = shell.zgrep("Finished Processing file", log_file)[1]
         with open(new_log_file, "w") as outfile:
             for row in result:
                 outfile.write(row)
@@ -414,7 +414,11 @@ class Ingestor(object):
 
         # Grab the deployment number.
         # The filename mask structure might change pending decision from the MIOs.
-        parameters['deployment_number'] = int(parameters['filename_mask'].split("/")[5][1:])
+        parameters['deployment_number'] = str(int([
+            n for n 
+            in parameters['filename_mask'].split("/") 
+            if len(n)==6 and n[0] in ('D', 'R', 'X')
+            ][0][1:]))
 
         self.logger.info('')
         self.logger.info(
@@ -454,13 +458,10 @@ class Ingestor(object):
             "Determining if any files have already been ingested to %s." % parameters['uframe_route'])
         for data_file in data_files:
             file_and_queue = "%s (%s)" % (data_file, parameters['uframe_route'])
-            if in_edex_log(parameters['uframe_route'], data_file):
-                if self.force_mode:
-                    self.logger.warning((
-                        "EDEX logs indicate that %s has already been ingested, "
-                        "but force mode (-f) is active. The file will be reingested."
-                        ) % file_and_queue)
-                else:
+            if self.force_mode:
+                pass
+            else:
+                if in_edex_log(parameters['uframe_route'], data_file):
                     self.logger.warning((
                         "EDEX logs indicate that %s has already been ingested. "
                         "The file will not be reingested."
@@ -580,7 +581,7 @@ class Ingestor(object):
                         data_file, 
                         batch['reference_designator'], 
                         batch['data_source'],
-                        str(batch['deployment_number']),
+                        batch['deployment_number'],
                         )) + "\n"
                     outfile.write(ingestion_command)
         self.logger.info('')
