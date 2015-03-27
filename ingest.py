@@ -72,8 +72,10 @@ def set_options(object, attrs, options):
         setattr(object, attr, options.get(attr, defaults[attr]))
 
 def log_and_exit(error_code):
-    logger.error("Script exited with error code %s." % error_code)
-    logger.info("-")
+    exit_logger = logging.getLogger('Exit')
+    if error_code != 0:
+        exit_logger.error("Script exited with error code %s." % error_code)
+    exit_logger.info("-")
     sys.exit(error_code)
 
 class Task(object):
@@ -605,11 +607,6 @@ class Ingestor(object):
             writer.writerow(f)
 
 if __name__ == '__main__':
-    # If the -h argument is passed at the command line, display the internal documentation and exit.
-    if "-h" in sys.argv:
-        sys.stdout.write(INTERNAL_DOCUMENTATION)
-        log_and_exit(0)
-
     # Separate the task and arguments.
     task, args = sys.argv[1], sys.argv[2:]
 
@@ -621,7 +618,12 @@ if __name__ == '__main__':
         log_file_name=log_file_name,
         send_mail="-no-email" not in args and EMAIL['enabled'])
     main_logger = logging.getLogger('Main')
-    
+
+    # If the -h argument is passed at the command line, display the internal documentation and exit.
+    if "-h" in sys.argv:
+        sys.stdout.write(INTERNAL_DOCUMENTATION)
+        log_and_exit(0)
+
     # Run the task with the arguments.
     perform = Task(args)
     if task in Task.valid_tasks:
@@ -635,6 +637,3 @@ if __name__ == '__main__':
             main_logger.exception("There was an unexpected error.")
     else:
         main_logger.error("%s is not a valid ingestion task." % task)
-else:
-    if EMAIL['enabled']:
-        main_logger.LOGGING_CONFIG['loggers']['']['handlers'] += ['errors_to_email']
