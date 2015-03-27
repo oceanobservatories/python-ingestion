@@ -2,3 +2,4 @@ ipython==2.4.1
 PyYAML==3.11
 SQLAlchemy==0.9.8
 whelk==2.4
+mailinglogger==3.8.0
