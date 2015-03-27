@@ -1,27 +1,27 @@
 # Default configuration for the ingestion script. 
 # Copy this file to config.yml and adjust the settings as necessary.
 
-SERVER: null
+SERVER: null                # The hostname of the server that this script is hosted on.
 
-SLEEP_TIMER: 3
-MAX_FILE_AGE: null
-QUICK_LOOK_QUANTITY: null
-START_DATE: null
-END_DATE: null
+SLEEP_TIMER: 0              # The amount of time (in seconds) to wait in between ingestion commands.
+MAX_FILE_AGE: null          # The max age of a file (in seconds) to ingest. Use for active deployments and cron jobs.
+QUICK_LOOK_QUANTITY: null   # The max number of files per file mask to ingest. Used for quick look ingestions.
+START_DATE: null            # The earliest date a file can have to be included in ingestion (YYYY-MM-DD).
+END_DATE: null              # The latest date a file can have to be included in ingestion (YYYY-MM-DD).
 
 UFRAME:
-    command: /home/developer/uframes/ooi/bin/ingestsender
-    log_path: .
-    failed_ingestion_path: .
+    command: /home/developer/uframes/ooi/bin/ingestsender        # The path to the ingestsender command.
+    log_path: .                                                  # The path to where the script's ingestion logs will be stored.
+    failed_ingestion_path: .                                     # The path to where failed ingestion CSVs will be stored.
 
 EDEX:
-    command: /home/developer/uframes/ooi/bin/edex-server
-    log_path: /home/developer/uframes/ooi/uframe-1.0/edex/logs/
-    processed_log_path: ./processed_edex_logs/
-    fake_source: False
-    cooldown: 60
+    command: /home/developer/uframes/ooi/bin/edex-server         # The path to the edex-server command.      
+    log_path: /home/developer/uframes/ooi/uframe-1.0/edex/logs/  # The path to the EDEX logs.
+    processed_log_path: ./processed_edex_logs/                   # The path to where the filtered/reduced EDEX logs will be stored.
+    fake_source: False                                           # Set to True to fool the script into thinking that edex-server was sourced.
+    cooldown: 60                                                 # The wait time (in seconds) after EDEX services are started by the script.
 
-EMAIL: 
+EMAIL: # Used for email notifications of errors. Requires a valid SMTP server to work.
     enabled: False
     sender: ruig@ooi.rutgers.edu
     receivers:
