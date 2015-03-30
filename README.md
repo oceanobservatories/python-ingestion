@@ -1,17 +1,26 @@
 # python-ingestion
 Python scripts for ingestion of UFrame data.
 
+## Setup 
 Requires Python 2.7.x
 
-A standard practice for deploying a Python application is to create a virutalenv to house the libraries the application will use in a sandboxed environment. If it isn't already installed, install virtualenv, (https://virtualenv.pypa.io/en/latest/), create a new virtualenv, and then activate it.
+A standard practice for deploying a Python application is to create a virutalenv to house the libraries the application will use in a sandboxed environment. If it isn't already installed, install virtualenv (https://virtualenv.pypa.io/en/latest/).
 
-Install the libraries using pip:
+Source the EDEX environment on the server to ensure that the version of Python being used is 2.7.x, otherwise the virutalenv will be created with the wrong version of Python. Check the Python version to make sure.
+
+    python --version
+
+Create and activate a new virtualenv by following the instructions in the virutalenv User Guide (https://virtualenv.pypa.io/en/latest/userguide.html).
+
+Ensure the virutalenv is activated and install the libraries using pip:
 
     pip install -r requirements.txt
 
 Copy the config.yml.template to config.yml and edit the new config.yml file to specify the correct paths for the various configuration options. Use the comments in the config.yml file as a guide and create any directories as necessary. Whenever possible, use absolute paths.
 
 Command line options override options set in the config.yml file.
+
+## Usage
 
 Remember to activate the virtualenv before using the script.
 
