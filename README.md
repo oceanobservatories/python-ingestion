@@ -3,13 +3,17 @@ Python scripts for ingestion of UFrame data.
 
 Requires Python 2.7.x
 
-Create a virutalenv (https://virtualenv.pypa.io/en/latest/) and install the libraries using pip:
+A standard practice for deploying a Python application is to create a virutalenv to house the libraries the application will use in a sandboxed environment. If it isn't already installed, install virtualenv, (https://virtualenv.pypa.io/en/latest/), create a new virtualenv, and then activate it.
+
+Install the libraries using pip:
 
     pip install -r requirements.txt
-    
+
 Copy the config.yml.template to config.yml and edit the new config.yml file to specify the correct paths for the various configuration options. Use the comments in the config.yml file as a guide and create any directories as necessary. Whenever possible, use absolute paths.
 
 Command line options override options set in the config.yml file.
+
+Remember to activate the virtualenv before using the script.
 
     Usage: python ingest.py [task] [options]
 
