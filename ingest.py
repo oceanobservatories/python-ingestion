@@ -504,8 +504,10 @@ class Ingestor(object):
             self.logger.error("%s not found." % csv_file)
             return False
         fieldnames = ['uframe_route', 'filename_mask', 'reference_designator', 'data_source']
-        if reader.fieldnames != fieldnames:
-            self.logger.error("%s does not have valid column headers." % csv_file)
+        if not set(fieldnames).issubset(reader.fieldnames):
+            self.logger.error((
+                "%s does not have valid column headers. "
+                "The following columns are required: %s") % (csv_file, ", ".join(fieldnames)))
             return False
 
         # Load the queue with parameters from each row.
