@@ -418,11 +418,17 @@ class Ingestor(object):
 
         # Grab the deployment number.
         # The filename mask structure might change pending decision from the MIOs.
-        parameters['deployment_number'] = str(int([
-            n for n 
-            in parameters['filename_mask'].split("/") 
-            if len(n)==6 and n[0] in ('D', 'R', 'X')
-            ][0][1:]))
+        try:
+            parameters['deployment_number'] = str(int([
+                n for n 
+                in parameters['filename_mask'].split("/") 
+                if len(n)==6 and n[0] in ('D', 'R', 'X')
+                ][0][1:]))
+        except:
+            self.logger.error(
+                "Can't get deployment number from %s." % parameters['filename_mask'])
+            self.failed_ingestions.append(parameters)
+            return False
 
         self.logger.info('')
         self.logger.info(
@@ -512,7 +518,7 @@ class Ingestor(object):
 
         # Load the queue with parameters from each row.
         for row in reader:
-            self.load_queue(row)
+            self.load_queue({f: row[f] for f in row if f in fieldnames})
 
     def send(self, data_files, uframe_route, reference_designator, data_source, deployment_number):
         ''' Calls UFrame's ingest sender application with the appropriate command-line arguments 
