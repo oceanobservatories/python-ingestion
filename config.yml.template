@@ -28,3 +28,7 @@ EMAIL: # Used for email notifications of errors. Requires a valid SMTP server to
         - ruig@ooi.rutgers.edu
     server: localhost
     port: 1025
+
+# Required to validate the CSVs in the Github repository. 
+# Contact shariq.ansari@rutgers.edu for token.
+GITHUB_TOKEN: null

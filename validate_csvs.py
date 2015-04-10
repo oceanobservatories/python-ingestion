@@ -4,7 +4,7 @@ from StringIO import StringIO
 from github import Github
 from glob import glob
 
-GITHUB_TOKEN = "e64e6a23706e149547ee9c51ff79fee1f77f5b80"
+from config import GITHUB_TOKEN
 
 logging.config.dictConfig({
     'version': 1,
@@ -23,6 +23,7 @@ logging.config.dictConfig({
             'level': 'INFO',
             'formatter': 'simple',
             'filename': "validate_csv.log",
+            'mode': 'w',
             },
         'stream_handler': {
             'class': 'logging.StreamHandler',
@@ -59,13 +60,18 @@ def find_csvs(repo, filepath):
             CSV_FILES[item.path] = StringIO(item.decoded_content)
             log.info(item.path)
 
+log.info("Verifying CSVs stored at %s" % r.html_url)
 find_csvs(r, ".")
 
 for f in CSV_FILES:
     try:
         reader = csv.DictReader(CSV_FILES[f])
+        log.info("")
+        log.info("Checking file paths in %s" % f) 
         for row in reader:
             files = glob(row["filename_mask"])
-            log.info("%s file(s) found for %s", (len(files), row["filename_mask"]))
+            action = {True: "info", False: "warning"}[bool(len(files))]
+            getattr(log, action)(
+                "%s file(s) found for %s in %s" % (len(files), row["filename_mask"], f))
     except Exception:
         log.exception(f)
