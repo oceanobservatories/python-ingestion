@@ -407,8 +407,10 @@ class Ingestor(object):
 
         mask_in_logs = shell.zgrep(
             "%s.*%s" % (
-                parameters['uframe_route'], parameters['filemask'].replace("*", ".*")),
-            *self.service_manager.edex_log_files,
+                parameters['uframe_route'], 
+                parameters['filename_mask'].replace("*", ".*")
+                ),
+            *self.service_manager.edex_log_files
             )[1]
 
         def file_in_edex_log(uframe_route, filemask):
