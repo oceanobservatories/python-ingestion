@@ -413,7 +413,7 @@ class Ingestor(object):
             *self.service_manager.edex_log_files
             )[1]
 
-        def file_in_edex_log(uframe_route, filemask):
+        def in_edex_log(uframe_route, filemask):
             ''' Check EDEX logs to see if the file has been ingested by EDEX.'''
             if not mask_in_logs:
                 return False
