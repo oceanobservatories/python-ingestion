@@ -45,7 +45,7 @@ g = Github(GITHUB_TOKEN)
 r = [
     o for o 
     in g.get_user().get_orgs() 
-    if o.name=='OOI Integration'
+    if o.login=='ooi-integration'
     ][0].get_repo('ingestion-csvs')
 
 CSV_FILES = {}

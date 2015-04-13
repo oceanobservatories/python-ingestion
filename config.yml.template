@@ -30,5 +30,8 @@ EMAIL: # Used for email notifications of errors. Requires a valid SMTP server to
     port: 1025
 
 # Required to validate the CSVs in the Github repository. 
-# Contact shariq.ansari@rutgers.edu for token.
 GITHUB_TOKEN: null
+
+# Contact Shariq Ansari (shariq.ansari@rutgers.edu) for token.
+# Alternatively, if you have administrator access to the ooi-integration organization on GitHub, you can generate a token yourself.
+# The token only requires the public_repo and read:org permissions.

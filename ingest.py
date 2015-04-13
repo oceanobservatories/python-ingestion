@@ -405,12 +405,19 @@ class Ingestor(object):
         ''' Finds the files that match the filename_mask parameter and loads them into the Ingestor
             object's queue. '''
 
-        def in_edex_log(uframe_route, datafile):
+        mask_in_logs = shell.zgrep(
+            "%s.*%s" % (
+                parameters['uframe_route'], parameters['filemask'].replace("*", ".*")),
+            *self.service_manager.edex_log_files,
+            )[1]
+
+        def file_in_edex_log(uframe_route, filemask):
             ''' Check EDEX logs to see if the file has been ingested by EDEX.'''
-            search_string = "%s.*%s" % (uframe_route, datafile)
+            if not mask_in_logs:
+                return False
+            search_string = "%s.*%s" % (uframe_route, filemask)
             return bool(pipe(
-                pipe.zgrep(
-                    "-m1", search_string, *self.service_manager.edex_log_files) | pipe.head("-1")
+                    pipe.echo(mask_in_logs) | pipe.grep("-m1", search_string ) | pipe.head("-1")
                 )[1])
         
         # Get a list of files that match the file mask and log the list size.
@@ -471,12 +478,13 @@ class Ingestor(object):
             if self.force_mode:
                 pass
             else:
-                if in_edex_log(parameters['uframe_route'], data_file):
-                    self.logger.warning((
-                        "EDEX logs indicate that %s has already been ingested. "
-                        "The file will not be reingested."
-                        ) % file_and_queue)
-                    continue
+                if bool(mask_in_logs):
+                    if in_edex_log(parameters['uframe_route'], data_file):
+                        self.logger.warning((
+                            "EDEX logs indicate that %s has already been ingested. "
+                            "The file will not be reingested."
+                            ) % file_and_queue)
+                        continue
             filtered_data_files.append(data_file)
 
         # If no files are found, consider the entire filename mask a failure and track it.
