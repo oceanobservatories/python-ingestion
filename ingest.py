@@ -405,6 +405,7 @@ class Ingestor(object):
         ''' Finds the files that match the filename_mask parameter and loads them into the Ingestor
             object's queue. '''
 
+        # Check EDEX logs to see if any file matching the mask has been ingested.
         mask_in_logs = shell.zgrep(
             "%s.*%s" % (
                 parameters['uframe_route'], 
@@ -526,9 +527,15 @@ class Ingestor(object):
                 "The following columns are required: %s") % (csv_file, ", ".join(fieldnames)))
             return False
 
+        def commented(row):
+            ''' Check to see if the row is commented out. Any field that starts with # indictes 
+                a comment.'''
+            return bool([v for v in row.itervalues() if v.startswith("#")])
+
         # Load the queue with parameters from each row.
         for row in reader:
-            self.load_queue({f: row[f] for f in row if f in fieldnames})
+            if not commented(row):
+                self.load_queue({f: row[f] for f in row if f in fieldnames})
 
     def send(self, data_files, uframe_route, reference_designator, data_source, deployment_number):
         ''' Calls UFrame's ingest sender application with the appropriate command-line arguments 

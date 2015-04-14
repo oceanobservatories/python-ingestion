@@ -60,18 +60,25 @@ def find_csvs(repo, filepath):
             CSV_FILES[item.path] = StringIO(item.decoded_content)
             log.info(item.path)
 
-log.info("Verifying CSVs stored at %s" % r.html_url)
-find_csvs(r, ".")
+def commented(row):
+    ''' Check to see if the row is commented out. Any field that starts with # indictes 
+        a comment.'''
+    return bool([v for v in row.itervalues() if v.startswith("#")])
 
-for f in CSV_FILES:
-    try:
-        reader = csv.DictReader(CSV_FILES[f])
-        log.info("")
-        log.info("Checking file paths in %s" % f) 
-        for row in reader:
-            files = glob(row["filename_mask"])
-            action = {True: "info", False: "warning"}[bool(len(files))]
-            getattr(log, action)(
-                "%s file(s) found for %s in %s" % (len(files), row["filename_mask"], f))
-    except Exception:
-        log.exception(f)
+if __name__ == "Main":
+    log.info("Verifying CSVs stored at %s" % r.html_url)
+    find_csvs(r, ".")
+
+    for f in CSV_FILES:
+        try:
+            reader = csv.DictReader(CSV_FILES[f])
+            log.info("")
+            log.info("Checking file paths in %s" % f) 
+            for row in reader:
+                if not commented(row):
+                    files = glob(row["filename_mask"])
+                    action = {True: "info", False: "warning"}[bool(len(files))]
+                    getattr(log, action)(
+                        "%s file(s) found for %s in %s" % (len(files), row["filename_mask"], f))
+        except Exception:
+            log.exception(f)
