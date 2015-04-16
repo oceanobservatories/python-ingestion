@@ -55,6 +55,8 @@ from config import (
 import logger
 import email_notifications
 
+import qpid.messaging as qm
+
 def set_options(object, attrs, options):
     defaults = {
         'test_mode': False,
@@ -77,6 +79,31 @@ def log_and_exit(error_code):
         exit_logger.error("Script exited with error code %s." % error_code)
     exit_logger.info("-")
     sys.exit(error_code)
+
+class QpidSender:
+    ''' A helper class for sending ingest messages to ooi uframe with qpid.'''
+    def __init__(self, address, host="localhost", port=5672, user="guest",
+            password="guest"):
+        self.host=host
+        self.port=port
+        self.user=user
+        self.password=password
+        self.address=address
+
+    def connect(self):
+        self.connection = qm.Connection(host=self.host, port=self.port,
+                username=self.user, password=self.password)
+        self.connection.open()
+        self.session = self.connection.session()
+        self.sender = self.session.sender(self.address)
+
+    def send(self, message, content_type, sensor, delivery_type, deployment_number):
+        self.sender.send(qm.Message(content=message,
+                                    content_type=content_type,
+                                    user_id=self.user,
+                                    properties={"sensor":sensor,
+                                                "deliveryType":delivery_type,
+                                                "deploymentNumber": deployment_number}))
 
 class Task(object):
     ''' A helper class designed to manage the different types of ingestion tasks.'''
@@ -550,20 +577,21 @@ class Ingestor(object):
             # Check if the EDEX services are still running. If not, attempt to restart them.
             self.service_manager.wait_until_ready(previous_data_file)
 
-            ingestion_command = (
-                UFRAME['command'], uframe_route, data_file, reference_designator, data_source, deployment_number)
+            ingestion_command = ( "ingestsender", uframe_route, data_file, reference_designator, data_source, deployment_number)
             try:
-                # Attempt to send the file to UFrame's ingest sender.
+                # Attempt to send the data file over qpid to uframe.
                 ingestion_command_string = " ".join(ingestion_command)
                 if self.test_mode:
                     ingestion_command_string = "TEST MODE: " + ingestion_command_string
                 else:
-                    subprocess.check_output(ingestion_command)
-            except subprocess.CalledProcessError as e:
-                # If UFrame's ingest sender fails and returns a non-zero exit code, log it.
+                    qpid_sender = QpidSender(address=uframe_route)
+                    qpid_sender.connect()
+                    qpid_sender.send(data_file, "text/plain", reference_designator, data_source, deployment_number)
+            except qm.exceptions.MessagingError as e:
+                # Log any qpid errors
                 self.logger.error(
-                    "There was a problem with UFrame when ingesting %s (Error code %s)." % (
-                        data_file, e.returncode))
+                    "There was a problem with qpid when ingesting %s (Exception %s)." % (
+                        data_file, e))
                 self.failed_ingestions.append(
                     annotate_parameters(data_file, uframe_route, reference_designator, data_source))
             except Exception:

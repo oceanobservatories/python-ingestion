@@ -4,3 +4,4 @@ PyGithub==1.25.2
 PyYAML==3.11
 SQLAlchemy==0.9.9
 whelk==2.4
+qpid-python == 0.26
