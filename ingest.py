@@ -406,11 +406,13 @@ class Ingestor(object):
             object's queue. '''
 
         # Check EDEX logs to see if any file matching the mask has been ingested.
+        mask_search_string = "%s.*%s" % (
+            parameters['uframe_route'], 
+            parameters['filename_mask'].replace("*", ".*")
+            ),
+
         mask_in_logs = shell.zgrep(
-            "%s.*%s" % (
-                parameters['uframe_route'], 
-                parameters['filename_mask'].replace("*", ".*")
-                ),
+            mask_search_string, 
             *self.service_manager.edex_log_files
             )[1]
 
@@ -420,7 +422,7 @@ class Ingestor(object):
                 return False
             search_string = "%s.*%s" % (uframe_route, filemask)
             return bool(pipe(
-                    pipe.echo(mask_in_logs) | pipe.grep("-m1", search_string ) | pipe.head("-1")
+                    pipe.grep(mask_search_string, *self.service_manager.edex_log_files) | pipe.grep("-m1", search_string ) | pipe.head("-1")
                 )[1])
         
         # Get a list of files that match the file mask and log the list size.
