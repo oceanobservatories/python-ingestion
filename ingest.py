@@ -428,118 +428,6 @@ class Ingestor(object):
         if not self.service_manager.refresh_status():
             self.service_manager.action("start")
 
-    def load_queue(self, parameters):
-        ''' Finds the files that match the filename_mask parameter and loads them into the Ingestor
-            object's queue. '''
-
-        # Check EDEX logs to see if any file matching the mask has been ingested.
-        mask_search_string = "%s.*%s" % (
-            parameters['uframe_route'], 
-            parameters['filename_mask'].replace("*", ".*")
-            ),
-
-        mask_in_logs = shell.zgrep(
-            mask_search_string, 
-            *self.service_manager.edex_log_files
-            )[1]
-
-        def in_edex_log(uframe_route, filemask):
-            ''' Check EDEX logs to see if the file has been ingested by EDEX.'''
-            if not mask_in_logs:
-                return False
-            search_string = "%s.*%s" % (uframe_route, filemask)
-            return bool(pipe(
-                    pipe.grep(mask_search_string, *self.service_manager.edex_log_files) | pipe.grep("-m1", search_string ) | pipe.head("-1")
-                )[1])
-        
-        # Get a list of files that match the file mask and log the list size.
-        data_files = sorted(glob(parameters['filename_mask']))
-
-        # Grab the deployment number.
-        # The filename mask structure might change pending decision from the MIOs.
-        try:
-            parameters['deployment_number'] = str(int([
-                n for n 
-                in parameters['filename_mask'].split("/") 
-                if len(n)==6 and n[0] in ('D', 'R', 'X')
-                ][0][1:]))
-        except:
-            self.logger.error(
-                "Can't get deployment number from %s." % parameters['filename_mask'])
-            self.failed_ingestions.append(parameters)
-            return False
-
-        self.logger.info('')
-        self.logger.info(
-            "%s file(s) found for %s before filtering." % (
-                len(data_files), parameters['filename_mask']))
-
-        # If a start date is set, only ingest files modified after that start date.
-        if self.start_date:
-            self.logger.info("Start date set to %s, filtering file list." % (
-                self.start_date))
-            data_files = [
-                f for f in data_files
-                if datetime.fromtimestamp(os.path.getmtime(f)) > self.start_date]
-
-        # If a end date is set, only ingest files modified before that end date.
-        if self.end_date:
-            self.logger.info("end date set to %s, filtering file list." % (
-                self.end_date))
-            data_files = [
-                f for f in data_files
-                if datetime.fromtimestamp(os.path.getmtime(f)) < self.end_date]
-
-        # If a maximum file age is set, only ingest files that fall within that age.
-        if self.max_file_age:
-            self.logger.info("Maximum file age set to %s seconds, filtering file list." % (
-                self.max_file_age))
-            current_time = datetime.now()
-            age = timedelta(seconds=self.max_file_age)
-            data_files = [
-                f for f in data_files
-                if current_time - datetime.fromtimestamp(os.path.getmtime(f)) < age]
-
-        # Check if the data_file has previously been ingested. If it has, then skip it, unless 
-        # force mode (-f) is active.
-        filtered_data_files = []
-        self.logger.info(
-            "Determining if any files have already been ingested to %s." % parameters['uframe_route'])
-        for data_file in data_files:
-            file_and_queue = "%s (%s)" % (data_file, parameters['uframe_route'])
-            if self.force_mode:
-                pass
-            else:
-                if bool(mask_in_logs):
-                    if in_edex_log(parameters['uframe_route'], data_file):
-                        self.logger.warning((
-                            "EDEX logs indicate that %s has already been ingested. "
-                            "The file will not be reingested."
-                            ) % file_and_queue)
-                        continue
-            filtered_data_files.append(data_file)
-
-        # If no files are found, consider the entire filename mask a failure and track it.
-        if len(filtered_data_files) == 0:
-            self.failed_ingestions.append(parameters)
-            return False
-
-        ''' If a quick look quantity is set (either through the config.yml or the command-line 
-            argument), truncate the size of the list down to the specified quantity. '''
-        if self.quick_look_quantity and self.quick_look_quantity < len(filtered_data_files):
-            before_quick_look = len(filtered_data_files)
-            filtered_data_files = filtered_data_files[:self.quick_look_quantity]
-            self.logger.info(
-                "%s of %s file(s) from %s set for quick look ingestion." % (
-                    len(filtered_data_files), before_quick_look, parameters['filename_mask']))
-        else:
-            self.logger.info(
-                "%s file(s) from %s set for ingestion." % (
-                    len(filtered_data_files), parameters['filename_mask']))
-
-        parameters['data_files'] = filtered_data_files
-        self.queue.append(parameters)
-
     def load_queue_from_csv(self, csv_file):
         ''' Reads the specified CSV file for mask, route, designator, and source parameters and 
             loads the Ingestor object's queue with a batch with those matching parameters.'''
@@ -559,72 +447,150 @@ class Ingestor(object):
         def commented(row):
             ''' Check to see if the row is commented out. Any field that starts with # indictes 
                 a comment.'''
-            return bool([v for v in row.itervalues() if v.startswith("#")])
+            return bool([v for v in row.itervalues() if v and v.startswith("#")])
+
+        routes = {}
 
         # Load the queue with parameters from each row.
         for row in reader:
             if not commented(row):
-                self.load_queue({f: row[f] for f in row if f in fieldnames})
-
-    def send(self, data_files, uframe_route, reference_designator, data_source, deployment_number):
-        ''' Calls UFrame's ingest sender application with the appropriate command-line arguments 
-            for all files specified in the data_files list. '''
-
-        # Define some helper methods.
-        def annotate_parameters(file, route, designator, source):
-            ''' Turn the ingestion parameters into a dictionary with descriptive keys.'''
-            return {
-                'filename_mask': file, 
-                'uframe_route': route, 
-                'reference_designator': designator, 
-                'data_source': source,
-                }
-
-        # Ingest each file in the file list.
-        previous_data_file = ""
-        for data_file in data_files:
-            # Check if the EDEX services are still running. If not, attempt to restart them.
-            self.service_manager.wait_until_ready(previous_data_file)
-
-            ingestion_command = ( "ingestsender", uframe_route, data_file, reference_designator, data_source, deployment_number)
-            try:
-                # Attempt to send the data file over qpid to uframe.
-                ingestion_command_string = " ".join(ingestion_command)
-                if self.test_mode:
-                    ingestion_command_string = "TEST MODE: " + ingestion_command_string
+                mask = row['filename_mask']
+                parameters = {
+                    f: row[f] for f in row 
+                    if f in ('uframe_route', 'reference_designator', 'data_source')
+                    }
+                if mask in routes.keys():
+                    routes[mask].append(parameters)
                 else:
-                    qpid_sender = QpidSender(address=uframe_route)
-                    qpid_sender.connect()
-                    qpid_sender.send(data_file, "text/plain", reference_designator, data_source, deployment_number)
-            except qm.exceptions.MessagingError as e:
-                # Log any qpid errors
-                self.logger.error(
-                    "There was a problem with qpid when ingesting %s (Exception %s)." % (
-                        data_file, e))
-                self.failed_ingestions.append(
-                    annotate_parameters(data_file, uframe_route, reference_designator, data_source))
-            except Exception:
-                # If there is some other system issue, log it with traceback.
-                self.logger.exception(
-                    "There was an unexpected system error when ingesting %s" % data_file)
-                self.failed_ingestions.append(
-                    annotate_parameters(data_file, uframe_route, reference_designator, data_source))
-            else:
-                # If there are no errors, consider the ingest send a success and log it.
-                self.logger.info(ingestion_command_string)
-            previous_data_file = data_file
-            sleep(self.sleep_timer)
-        return True
+                    routes[mask] = [parameters]
 
-    def ingest_from_queue(self):
-        ''' Call the ingestion command for each batch of files in the Ingestor object's queue. '''
-        for batch in self.queue:
-            filename_mask = batch.pop('filename_mask')
+        for mask in routes:
+            self.load_queue(mask, routes[mask])
+            
+            # self.load_queue({f: row[f] for f in row if f in fieldnames})
+
+    def load_queue(self, mask, routes):
+        ''' Finds the files that match the filename_mask parameter and loads them into the Ingestor
+            object's queue. '''
+
+        # Get a list of files that match the file mask and log the list size.
+        data_files = sorted(glob(mask))
+
+        # Grab the deployment number.
+        # The filename mask structure might change pending decision from the MIOs.
+        try:
+            deployment_number = str(int([
+                n for n in mask.split("/") 
+                if len(n)==6 and n[0] in ('D', 'R', 'X')
+                ][0][1:]))
+        except:
             self.logger.info('')
+            self.logger.error(
+                "Can't get deployment number from %s." % mask)
+            for p in routes:
+                self.failed_ingestions.append(dict(filename_mask=mask, **p))
+            return False
+
+        self.logger.info('')
+        self.logger.info(
+            "%s file(s) found for %s before filtering." % (
+                len(data_files), mask))
+
+        # If a start date is set, only ingest files modified after that start date.
+        if self.start_date:
+            self.logger.info("Start date set to %s, filtering file list." % (
+                self.start_date))
+            data_files = [
+                f for f in data_files
+                if datetime.fromtimestamp(os.path.getmtime(f)) > self.start_date]
+
+        # If a end date is set, only ingest files modified before that end date.
+        if self.end_date:
+            self.logger.info("End date set to %s, filtering file list." % (
+                self.end_date))
+            data_files = [
+                f for f in data_files
+                if datetime.fromtimestamp(os.path.getmtime(f)) < self.end_date]
+
+        # If a maximum file age is set, only ingest files that fall within that age.
+        if self.max_file_age:
+            self.logger.info("Maximum file age set to %s seconds, filtering file list." % (
+                self.max_file_age))
+            current_time = datetime.now()
+            age = timedelta(seconds=self.max_file_age)
+            data_files = [
+                f for f in data_files
+                if current_time - datetime.fromtimestamp(os.path.getmtime(f)) < age]
+
+        # Check if the data_file has previously been ingested. If it has, then skip it, unless 
+        # force mode (-f) is active.
+        filtered_data_files = []
+        if self.force_mode:
+            # If force mode is active, add all data files to the queue with the respective routes.
+            for data_file in data_files:
+                filtered_data_files.append((data_file, routes))
+        else:
+            # Otherwise, check EDEX logs to see if any file matching the mask has been ingested.
+            route_in_logs = {}
+            for p in routes:
+                route_in_logs[p['uframe_route']] = bool(shell.grep(
+                        "%s.*%s" % (p['uframe_route'], mask.replace("*", ".*")), 
+                        *self.service_manager.edex_log_files
+                    )[1])
+
+            def in_edex_log(mask, data_file, uframe_route):
+                ''' Check EDEX logs to see if the file has been ingested by EDEX.'''
+                if not route_in_logs[uframe_route]:
+                    return False
+                return bool(pipe(
+                        pipe.grep(
+                            "%s.*%s" % (uframe_route, mask.replace("*", ".*")), 
+                            *self.service_manager.edex_log_files
+                            ) | 
+                        pipe.grep(
+                            "-m1", "%s.*%s" % (uframe_route, data_file)
+                            ) | 
+                        pipe.head("-1")
+                    )[1])
+
             self.logger.info(
-                "Ingesting %s files for %s from the queue." % (
-                    len(batch['data_files']), filename_mask))
-            self.send(**batch)
+                "Determining if any files matching %s have already been ingested." % mask)
+            for data_file in data_files:
+                valid_routes = []
+                for p in routes:
+                    uframe_route = p['uframe_route']
+                    if in_edex_log(mask, data_file, uframe_route):
+                        self.logger.warning((
+                            "EDEX logs indicate that %s (%s) has already been ingested. "
+                            "The file will not be reingested.") % (data_file, uframe_route))
+                        continue
+                    valid_routes.append(p)
+                if len(valid_routes) > 0:
+                    filtered_data_files.append((data_file, valid_routes))
+
+        # If no files are found, consider the entire filename mask a failure and track it.
+        if len(filtered_data_files) == 0:
+            self.failed_ingestions.append(parameters)
+            return False
+
+        ''' If a quick look quantity is set (either through the config.yml or the command-line 
+            argument), truncate the size of the list down to the specified quantity. '''
+        if self.quick_look_quantity and self.quick_look_quantity < len(filtered_data_files):
+            before_quick_look = len(filtered_data_files)
+            filtered_data_files = filtered_data_files[:self.quick_look_quantity]
+            self.logger.info(
+                "%s of %s file(s) from %s set for quick look ingestion." % (
+                    len(filtered_data_files), before_quick_look, mask))
+        else:
+            self.logger.info(
+                "%s file(s) from %s set for ingestion." % (
+                    len(filtered_data_files), mask))
+
+        self.queue.append({
+            "mask": mask, 
+            "files": filtered_data_files, 
+            'deployment_number': deployment_number
+            })
 
     def write_queue_to_file(self, command_file=None):
         ''' Write the ingestion command for each file to be ingested to a log file. '''
@@ -636,24 +602,90 @@ class Ingestor(object):
         commands_file = "/".join((UFRAME['log_path'], commands_file))
         with open(commands_file, 'w') as outfile:
             for batch in self.queue:
-                for data_file in batch['data_files']:
-                    ingestion_command = " ".join((
-                        UFRAME['command'], 
-                        batch['uframe_route'], 
-                        data_file, 
-                        batch['reference_designator'], 
-                        batch['data_source'],
-                        batch['deployment_number'],
-                        )) + "\n"
-                    outfile.write(ingestion_command)
+                for data_file, routes in batch['files']:
+                    for route in routes:
+                        ingestion_command = " ".join((
+                            UFRAME['command'], 
+                            route['uframe_route'], 
+                            data_file, 
+                            route['reference_designator'], 
+                            route['data_source'],
+                            batch['deployment_number'],
+                            )) + "\n"
+                        outfile.write(ingestion_command)
         self.logger.info('')
         self.logger.info('Wrote ingestion commands for files in queue to %s.' % commands_file)
+
+    def ingest_from_queue(self):
+        ''' Call the ingestion command for each batch of files in the Ingestor object's queue. '''
+        for batch in self.queue:
+            self.logger.info('')
+            self.logger.info("Ingesting %s files for %s from the queue." % (len(batch['files']), batch['mask']))
+            self.send(batch['files'], batch['deployment_number'])
+
+    def send(self, files, deployment_number):
+        ''' Calls UFrame's ingest sender application with the appropriate command-line arguments 
+            for all files specified in the data_files list. '''
+
+        # Define some helper methods.
+        def annotate_parameters(filename, route, designator, source):
+            ''' Turn the ingestion parameters into a dictionary with descriptive keys.'''
+            return {
+                'filename_mask': filename, 
+                'uframe_route': route, 
+                'reference_designator': designator, 
+                'data_source': source,
+                }
+
+        # Ingest each file in the file list.
+        previous_data_file = ""
+        for data_file, routes in files:
+            for r in routes:
+                uframe_route = r['uframe_route']
+                reference_designator = r['reference_designator']
+                data_source = r['data_source']
+
+                # Check if the EDEX services are still running. If not, attempt to restart them.
+                self.service_manager.wait_until_ready(previous_data_file)
+
+                ingestion_command = ("ingestsender", 
+                    uframe_route, data_file, reference_designator, data_source, deployment_number)
+                try:
+                    # Attempt to send the data file over qpid to uframe.
+                    ingestion_command_string = " ".join(ingestion_command)
+                    if self.test_mode:
+                        ingestion_command_string = "TEST MODE: " + ingestion_command_string
+                    else:
+                        qpid_sender = QpidSender(address=uframe_route)
+                        qpid_sender.connect()
+                        qpid_sender.send(
+                            data_file, "text/plain", 
+                            reference_designator, data_source, deployment_number)
+                except qm.exceptions.MessagingError as e:
+                    # Log any qpid errors
+                    self.logger.error(
+                        "There was a problem with qpid when ingesting %s (Exception %s)." % (
+                            data_file, e))
+                    self.failed_ingestions.append(
+                        annotate_parameters(data_file, uframe_route, reference_designator, data_source))
+                else:
+                    # If there are no errors, consider the ingest send a success and log it.
+                    self.logger.info(ingestion_command_string)
+                previous_data_file = data_file
+            sleep(self.sleep_timer)
+        return True
 
     def write_failures_to_csv(self, label):
         ''' Write any failed ingestions out into a CSV file that can be re-ingested later. '''
 
         date_string = datetime.today().strftime('%Y_%m_%d')
-        fieldnames = ['uframe_route', 'filename_mask', 'reference_designator', 'data_source', 'deployment_number']
+        fieldnames = [
+            'uframe_route', 
+            'filename_mask', 
+            'reference_designator', 
+            'data_source', 
+            'deployment_number',
+            ]
         outfile = "%s/failed_ingestions_%s_%s.csv" % (
             UFRAME["failed_ingestion_path"], label, date_string)
 
