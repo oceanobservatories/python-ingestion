@@ -571,7 +571,7 @@ class Ingestor(object):
         # If no files are found, consider the entire filename mask a failure and track it.
         if len(filtered_data_files) == 0:
             for p in routes:
-                self.failed_ingestions.append(dict(filename_mask=mask, **route))
+                self.failed_ingestions.append(dict(filename_mask=mask, **p))
             return False
 
         ''' If a quick look quantity is set (either through the config.yml or the command-line 
