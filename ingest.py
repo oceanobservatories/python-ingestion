@@ -533,10 +533,13 @@ class Ingestor(object):
             # Otherwise, check EDEX logs to see if any file matching the mask has been ingested.
             route_in_logs = {}
             for p in routes:
-                route_in_logs[p['uframe_route']] = bool(shell.grep(
-                        "%s.*%s" % (p['uframe_route'], mask.replace("*", ".*")), 
-                        *self.service_manager.edex_log_files
-                    )[1])
+                route_in_logs[p['uframe_route']] = bool(pipe(
+                        pipe.grep(
+                            "%s.*%s" % (p['uframe_route'], mask.replace("*", ".*")), 
+                            *self.service_manager.edex_log_files
+                            ) |
+                        pipe.head("-1")
+                        )[1])
 
             def in_edex_log(mask, data_file, uframe_route):
                 ''' Check EDEX logs to see if the file has been ingested by EDEX.'''
@@ -567,25 +570,22 @@ class Ingestor(object):
                     valid_routes.append(p)
                 if len(valid_routes) > 0:
                     filtered_data_files.append((data_file, valid_routes))
+                ''' If a quick look quantity is set (either through the config.yml or the command-line 
+                    argument), exit the loop once the quick look quantity is met. '''
+                if self.quick_look_quantity and self.quick_look_quantity == len(filtered_data_files):
+                    self.logger.info(
+                        "%s of %s file(s) from %s set for quick look ingestion." % (
+                            len(filtered_data_files), len(data_files), mask))
+                    break
+            else:
+                self.logger.info(
+                    "%s file(s) from %s set for ingestion." % (len(filtered_data_files), mask))
 
         # If no files are found, consider the entire filename mask a failure and track it.
         if len(filtered_data_files) == 0:
             for p in routes:
                 self.failed_ingestions.append(dict(filename_mask=mask, **p))
             return False
-
-        ''' If a quick look quantity is set (either through the config.yml or the command-line 
-            argument), truncate the size of the list down to the specified quantity. '''
-        if self.quick_look_quantity and self.quick_look_quantity < len(filtered_data_files):
-            before_quick_look = len(filtered_data_files)
-            filtered_data_files = filtered_data_files[:self.quick_look_quantity]
-            self.logger.info(
-                "%s of %s file(s) from %s set for quick look ingestion." % (
-                    len(filtered_data_files), before_quick_look, mask))
-        else:
-            self.logger.info(
-                "%s file(s) from %s set for ingestion." % (
-                    len(filtered_data_files), mask))
 
         self.queue.append({
             "mask": mask, 
