@@ -81,8 +81,8 @@ def file_mask_has_deployment_number(row):
 def ingest_queue_matches_data_source(row):
     return row['uframe_route'].split("_")[-1] == row['data_source']
 
-if __name__ == "Main":
-    log.info("Verifying CSVs stored at %s" % r.html_url)
+if __name__ == "__main__":
+    log.info("Verifying CSVs stored at %s" % repository.html_url)
 
     for f in get_csvs(repository, "."):
         try:
