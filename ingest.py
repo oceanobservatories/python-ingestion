@@ -104,6 +104,8 @@ class QpidSender:
                                     properties={"sensor":sensor,
                                                 "deliveryType":delivery_type,
                                                 "deploymentNumber": deployment_number}))
+    def disconnect(self):
+        self.connection.close()
 
 class Task(object):
     ''' A helper class designed to manage the different types of ingestion tasks.'''
@@ -662,6 +664,7 @@ class Ingestor(object):
                         qpid_sender.send(
                             data_file, "text/plain", 
                             reference_designator, data_source, deployment_number)
+                        qpid_sender.disconnect()
                 except qm.exceptions.MessagingError as e:
                     # Log any qpid errors
                     self.logger.error(
