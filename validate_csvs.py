@@ -49,11 +49,10 @@ repository = [
 
 log = logging.getLogger('Main')
 
-def get_csvs(repo, filepath):
-    csv_files = {}
+def get_csvs(repo, filepath, csv_files={}):
     for item in repo.get_dir_contents(filepath):
         if item.type == "dir":
-            get_csvs(repo, item.path)
+            csv_files = get_csvs(repo, item.path)
         elif item.type == "file":
             csv_files[item.path] = StringIO(item.decoded_content)
             log.info("Found CSV file: %s" % item.path)
@@ -81,26 +80,26 @@ def file_mask_has_deployment_number(row):
 def ingest_queue_matches_data_source(row):
     return row['uframe_route'].split("_")[-1] == row['data_source']
 
-if __name__ == "__main__":
-    log.info("Verifying CSVs stored at %s" % repository.html_url)
+log.info("Verifying CSVs stored at %s" % repository.html_url)
 
-    for f in get_csvs(repository, "."):
+csv_files = get_csvs(repository, ".")
+
+for f in csv_files:
+    reader = csv.DictReader(csv_files[f])
+    log.info("")
+    log.info("Validating CSV file: %s" % f) 
+    parameters = [r for r in reader if not commented(r)]
+    for row in parameters:
         try:
-            reader = csv.DictReader(CSV_FILES[f])
-            log.info("")
-            log.info("Validating CSV file: %s" % f) 
-            parameters = [r for r in reader if not commented(r)]
-            for row in parameters:
-                if not file_mask_has_files(row):
-                    log.warning(
-                        "No files found for %s." % (row["filename_mask"], f))
-                if not file_mask_has_deployment_number(row):
-                    log.warning(
-                        "Can't parse Deployment Number from %s." % (row["filename_mask"], f))
-                if not ingest_queue_matches_data_source(row):
-                    log.warning(
-                        "UFrame Route doesn't match Data Source: %s, %s" % (
-                            row['uframe_route'], row['data_source']))
-
+            if not file_mask_has_files(row):
+                log.warning(
+                    "No files found for %s (%s)." % (row["filename_mask"], f))
+            if not file_mask_has_deployment_number(row):
+                log.warning(
+                    "Can't parse Deployment Number from %s (%s)." % (row["filename_mask"], f))
+            if not ingest_queue_matches_data_source(row):
+                log.warning(
+                    "UFrame Route doesn't match Data Source: %s, %s" % (
+                        row['uframe_route'], row['data_source']))
         except Exception:
             log.exception(f)
