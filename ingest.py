@@ -423,12 +423,27 @@ class Ingestor(object):
             options)
         self.queue = []
         self.failed_ingestions = []
+        self.qpid_senders = {}
 
         ''' Instantiate a ServiceManager for this Ingestor and start the services if any are not 
             running. '''
         self.service_manager = options.get('service_manager', ServiceManager(**options))
         if not self.service_manager.refresh_status():
             self.service_manager.action("start")
+
+    def get_qpid_sender(self, route):
+        ''' Connect or retrieve an already connected QPID sender for a specific route.'''
+        qpid_sender = self.qpid_senders.get(route, None)
+        if not qpid_sender:
+            qpid_sender = QpidSender(address=route)
+            qpid_sender.connect()
+            self.qpid_senders[route] = qpid_sender
+        return qpid_sender
+
+    def close_qpid_connections(self):
+        ''' Close all connected QPID senders. '''
+        for route in self.qpid_senders:
+            self.qpid_senders[route].disconnect()
 
     def load_queue_from_csv(self, csv_file):
         ''' Reads the specified CSV file for mask, route, designator, and source parameters and 
@@ -659,12 +674,9 @@ class Ingestor(object):
                     if self.test_mode:
                         ingestion_command_string = "TEST MODE: " + ingestion_command_string
                     else:
-                        qpid_sender = QpidSender(address=uframe_route)
-                        qpid_sender.connect()
-                        qpid_sender.send(
+                        self.get_qpid_sender(uframe_route).send(
                             data_file, "text/plain", 
                             reference_designator, data_source, deployment_number)
-                        qpid_sender.disconnect()
                 except qm.exceptions.MessagingError as e:
                     # Log any qpid errors
                     self.logger.error(
