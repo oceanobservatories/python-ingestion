@@ -20,6 +20,7 @@ EDEX:
     processed_log_path: ./processed_edex_logs/                   # The path to where the filtered/reduced EDEX logs will be stored.
     fake_source: False                                           # Set to True to fool the script into thinking that edex-server was sourced.
     cooldown: 60                                                 # The wait time (in seconds) after EDEX services are started by the script.
+    auto_restart: False                                          # Set to True to have the script attempt to restart services if they crash.
 
 EMAIL: # Used for email notifications of errors. Requires a valid SMTP server to work.
     enabled: False

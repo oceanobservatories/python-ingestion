@@ -358,12 +358,15 @@ class ServiceManager(object):
                         "(%s). The services were restarted successfully and ingestion will continue."
                         ) % previous_data_file)
                 return
-            self.logger.warn((
-                "One or more EDEX services crashed after ingesting the previous data file "
-                "(%s). Attempting to restart services." % previous_data_file
-                ))
+            self.logger.warn(
+                ("One or more EDEX services crashed after ingesting the previous data file (%s)."
+                ) % previous_data_file)
             crashed = True
-            self.restart()
+            if EDEX['auto_restart']:
+                self.logger.warn("Attempting to restart the services.")
+                self.restart()
+            else:
+                self.logger.warn("Waiting for external processes to restart the services.")
 
     def process_log(self, log_file):
         ''' Processes an EDEX log and creates a new log file with only the relevant, 
