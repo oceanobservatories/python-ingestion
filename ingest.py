@@ -14,24 +14,21 @@ Tasks:
 Options:
                 -h  Display this help message.
                 -t  Test Mode. 
-                        The script will go through all of the motions of ingesting data, but will 
-                        not call any ingest sender commands.
+                        The script will go through all of the motions of ingesting data, but will not call any ingest 
+                        sender commands.
                 -c  Commands-only Mode. 
-                        The script will write the ingest sender commands to a file for all files in 
-                        the queue, but will not go through the ingestion process.
+                        The script will write the ingest sender commands to a file for all files in the queue, but 
+                        will not go through the ingestion process.
                 -f  Force Mode. 
-                        The script will disregard the EDEX log file checks for already ingested 
-                        data and ingest all matching files.
+                        The script will disregard the EDEX log file checks for already ingested data and ingest all 
+                        matching files.
          -no-email  Don't send email notifications.
          --sleep=n  Override the sleep timer with a value of n seconds.
-     --startdate=d  Only ingest files newer than the specified start date d (in the YYYY-MM-DD 
-                    format).
-       --enddate=d  Only ingest files older than the specified end date d (in the YYYY-MM-DD 
-                    format).
+     --startdate=d  Only ingest files newer than the specified start date d (in the YYYY-MM-DD format).
+       --enddate=d  Only ingest files older than the specified end date d (in the YYYY-MM-DD format).
            --age=n  Override the maximum age of the files to be ingested in n seconds.
       --cooldown=n  Override the EDEX service startup cooldown timer with a value of n seconds.
-         --quick=n  Override the number of files per filemask to ingest. Used for quick look 
-                    ingestions.
+         --quick=n  Override the number of files per filemask to ingest. Used for quick look ingestions.
 
 Error Codes:
                  4  There is a problem with the EDEX server.
@@ -48,8 +45,8 @@ from glob import glob
 from whelk import shell, pipe
 
 from config import (
-    SERVER, SLEEP_TIMER, 
-    MAX_FILE_AGE, START_DATE, END_DATE, QUICK_LOOK_QUANTITY, 
+    SERVER, SLEEP_TIMER,
+    MAX_FILE_AGE, START_DATE, END_DATE, QUICK_LOOK_QUANTITY,
     UFRAME, EDEX, EMAIL)
 
 import logger
@@ -82,28 +79,32 @@ def log_and_exit(error_code):
 
 class QpidSender:
     ''' A helper class for sending ingest messages to ooi uframe with qpid.'''
-    def __init__(self, address, host="localhost", port=5672, user="guest",
-            password="guest"):
-        self.host=host
-        self.port=port
-        self.user=user
-        self.password=password
-        self.address=address
+    def __init__(self, address, host="localhost", port=5672, user="guest", password="guest"):
+        self.host = host
+        self.port = port
+        self.user = user
+        self.password = password
+        self.address = address
 
     def connect(self):
-        self.connection = qm.Connection(host=self.host, port=self.port,
-                username=self.user, password=self.password)
+        self.connection = qm.Connection(
+            host=self.host,
+            port=self.port,
+            username=self.user,
+            password=self.password
+            )
         self.connection.open()
         self.session = self.connection.session()
         self.sender = self.session.sender(self.address)
 
     def send(self, message, content_type, sensor, delivery_type, deployment_number):
-        self.sender.send(qm.Message(content=message,
-                                    content_type=content_type,
-                                    user_id=self.user,
-                                    properties={"sensor":sensor,
-                                                "deliveryType":delivery_type,
-                                                "deploymentNumber": deployment_number}))
+        self.sender.send(
+            qm.Message(content=message, content_type=content_type, user_id=self.user, 
+                properties={
+                    "sensor": sensor,
+                    "deliveryType": delivery_type,
+                    "deploymentNumber": deployment_number,
+                    }))
     def disconnect(self):
         self.connection.close()
 
@@ -134,7 +135,7 @@ class Task(object):
                 }
             switch = "--%s=" % switch
             try:
-                return converter([a for a in args if a[:len(switch)]==switch][0].split("=")[1])
+                return converter([a for a in args if a[:len(switch)] == switch][0].split("=")[1])
             except IndexError:
                 return None
             except ValueError:
@@ -160,9 +161,9 @@ class Task(object):
         self.mailer = email_notifications.Mailer(self.options)
 
     def dummy(self):
-        ''' The dummy task is used for testing basic initialization functions. It creates an 
-            Ingestor (which in turn creates a ServiceManager) and outputs all of the script's 
-            options to the log and sends an email notification with the same information. '''
+        ''' The dummy task is used for testing basic initialization functions. It creates an Ingestor (which in turn 
+            creates a ServiceManager) and outputs all of the script's options to the log and sends an email 
+            notification with the same information. '''
         ingestor = Ingestor(**self.options)
         self.logger.info("Dummy task was run with the following options:")
         for option in sorted(["%s: %s" % (o, self.options[o]) for o in self.options]):
@@ -259,8 +260,7 @@ class ServiceManager(object):
             env = dict((line.split("=", 1) for line in output.split('\x00') if line))
             os.environ.update(env)
         except Exception:
-            self.logger.exception(
-                "An error occurred when sourcing the EDEX server environment.")
+            self.logger.exception("An error occurred when sourcing the EDEX server environment.")
             log_and_exit(4)
         else:
             self.logger.info("EDEX server environment sourced.")
@@ -284,8 +284,7 @@ class ServiceManager(object):
                 self.logger.info(command_string)
                 subprocess.check_output(command)
         except Exception:
-            self.logger.exception(
-                "An error occurred when %sing services." % verbose_action)
+            self.logger.exception("An error occurred when %sing services." % verbose_action)
             log_and_exit(4)
         else:
             ''' When EDEX is started, it takes some time for the service to be ready. A cooldown 
@@ -320,8 +319,7 @@ class ServiceManager(object):
             else:
                 status = subprocess.check_output([self.edex_command, "all", "status"])
         except Exception:
-            self.logger.exception(
-                "An error occurred when checking the service statuses.")
+            self.logger.exception("An error occurred when checking the service statuses.")
             log_and_exit(4)
         else:
             # Parse and process the output of 'edex-server all status' into a dict.
@@ -354,13 +352,12 @@ class ServiceManager(object):
             if self.refresh_status():
                 if crashed:
                     self.logger.error((
-                        "One or more EDEX services crashed after ingesting the previous data file "
-                        "(%s). The services were restarted successfully and ingestion will continue."
+                        "One or more EDEX services crashed after ingesting the previous data file (%s)."
+                        "The services were restarted successfully and ingestion will continue."
                         ) % previous_data_file)
                 return
             self.logger.warn(
-                ("One or more EDEX services crashed after ingesting the previous data file (%s)."
-                ) % previous_data_file)
+                "One or more EDEX services crashed after ingesting the previous data file (%s)." % previous_data_file)
             crashed = True
             if EDEX['auto_restart']:
                 self.logger.warn("Attempting to restart the services.")
@@ -387,10 +384,8 @@ class ServiceManager(object):
                     "%s has already been processed." % log_file)
                 return
             else:
-                self.logger.info((
-                    "%s has already been processed, "
-                    "but has been modified and will be re-processed."
-                    ) % log_file)
+                self.logger.info(
+                    "%s has already been processed, but has been modified and will be re-processed." % log_file)
 
         result = shell.zgrep("Finished Processing file", log_file)[1]
         with open(new_log_file, "w") as outfile:
@@ -428,8 +423,7 @@ class Ingestor(object):
         self.failed_ingestions = []
         self.qpid_senders = {}
 
-        ''' Instantiate a ServiceManager for this Ingestor and start the services if any are not 
-            running. '''
+        ''' Instantiate a ServiceManager for this Ingestor and start the services if any are not running. '''
         self.service_manager = options.get('service_manager', ServiceManager(**options))
         if not self.service_manager.refresh_status():
             self.service_manager.action("start")
@@ -449,8 +443,8 @@ class Ingestor(object):
             self.qpid_senders[route].disconnect()
 
     def load_queue_from_csv(self, csv_file):
-        ''' Reads the specified CSV file for mask, route, designator, and source parameters and 
-            loads the Ingestor object's queue with a batch with those matching parameters.'''
+        ''' Reads the specified CSV file for mask, route, designator, and source parameters and loads the Ingestor 
+            object's queue with a batch with those matching parameters.'''
 
         try:
             reader = csv.DictReader(open(csv_file))
@@ -465,8 +459,7 @@ class Ingestor(object):
             return False
 
         def commented(row):
-            ''' Check to see if the row is commented out. Any field that starts with # indictes 
-                a comment.'''
+            ''' Check to see if the row is commented out. Any field that starts with # indictes a comment.'''
             return bool([v for v in row.itervalues() if v and v.startswith("#")])
 
         routes = {}
@@ -486,12 +479,9 @@ class Ingestor(object):
 
         for mask in routes:
             self.load_queue(mask, routes[mask])
-            
-            # self.load_queue({f: row[f] for f in row if f in fieldnames})
 
     def load_queue(self, mask, routes):
-        ''' Finds the files that match the filename_mask parameter and loads them into the Ingestor
-            object's queue. '''
+        ''' Finds the files that match the filename_mask parameter and loads them into the Ingestor object's queue. '''
 
         # Get a list of files that match the file mask and log the list size.
         data_files = sorted(glob(mask))
@@ -534,16 +524,15 @@ class Ingestor(object):
 
         # If a maximum file age is set, only ingest files that fall within that age.
         if self.max_file_age:
-            self.logger.info("Maximum file age set to %s seconds, filtering file list." % (
-                self.max_file_age))
+            self.logger.info("Maximum file age set to %s seconds, filtering file list." % (self.max_file_age))
             current_time = datetime.now()
             age = timedelta(seconds=self.max_file_age)
             data_files = [
                 f for f in data_files
                 if current_time - datetime.fromtimestamp(os.path.getmtime(f)) < age]
 
-        # Check if the data_file has previously been ingested. If it has, then skip it, unless 
-        # force mode (-f) is active.
+        ''' Check if the data_file has previously been ingested. If it has, then skip it, unless force mode (-f) is 
+            active. '''
         filtered_data_files = []
         if self.force_mode:
             # If force mode is active, add all data files to the queue with the respective routes.
@@ -590,8 +579,8 @@ class Ingestor(object):
                     valid_routes.append(p)
                 if len(valid_routes) > 0:
                     filtered_data_files.append((data_file, valid_routes))
-                ''' If a quick look quantity is set (either through the config.yml or the command-line 
-                    argument), exit the loop once the quick look quantity is met. '''
+                ''' If a quick look quantity is set (either through the config.yml or the command-line argument), exit 
+                    the loop once the quick look quantity is met. '''
                 if self.quick_look_quantity and self.quick_look_quantity == len(filtered_data_files):
                     self.logger.info(
                         "%s of %s file(s) from %s set for quick look ingestion." % (
