@@ -538,6 +538,11 @@ class Ingestor(object):
             # If force mode is active, add all data files to the queue with the respective routes.
             for data_file in data_files:
                 filtered_data_files.append((data_file, routes))
+                if self.quick_look_quantity and self.quick_look_quantity == len(filtered_data_files):
+                    self.logger.info(
+                        "%s of %s file(s) from %s set for quick look ingestion." % (
+                            len(filtered_data_files), len(data_files), mask))
+                    break
         else:
             # Otherwise, check EDEX logs to see if any file matching the mask has been ingested.
             route_in_logs = {}
