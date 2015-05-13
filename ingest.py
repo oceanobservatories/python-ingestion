@@ -51,6 +51,7 @@ from config import (
 
 import logger
 import email_notifications
+from dill_pool import apply_async
 
 import qpid.messaging as qm
 
@@ -114,6 +115,7 @@ class Task(object):
     # A list of methods on the Task class that are valid ingestion tasks.
     valid_tasks = (
         'from_csv',         # Ingest from a single CSV file.
+        'from_csv_m',       # Ingest from a single CSV file.
         'from_csv_batch',   # Ingest from multiple CSV files defined in a batch.
         'dummy',            # A dummy task. Doesn't do anything.
         ) 
@@ -189,6 +191,36 @@ class Task(object):
             csv_file.split("/")[-1].split(".")[0])
         if not self.options['commands_only']:
             ingestor.ingest_from_queue()
+
+        # Write out any failed ingestions to a new CSV file.
+        if ingestor.failed_ingestions:
+            ingestor.write_failures_to_csv(
+                csv_file.split("/")[-1].split(".")[0])
+
+        self.logger.info('')
+        self.logger.info("Ingestion completed.")
+        self.mailer.ingestion_completed(csv_file)
+        return True
+
+    def from_csv_m(self):
+        ''' Ingest data mapped out by a single CSV file. '''
+
+        # Check to see if a valid CSV has been specified.
+        try:
+            csv_file = [f for f in self.args if f[-4:].lower()==".csv"][0]
+        except IndexError:
+            self.logger.error("No mapping CSV specified.")
+            return False
+
+        # Create an instance of the Ingestor class with common options set.
+        ingestor = Ingestor(**self.options)
+
+        # Ingest from the CSV file.
+        ingestor.load_queue_from_csv(csv_file)
+        ingestor.write_queue_to_file(
+            csv_file.split("/")[-1].split(".")[0])
+        if not self.options['commands_only']:
+            ingestor.ingest_from_queue_multiprocess()
 
         # Write out any failed ingestions to a new CSV file.
         if ingestor.failed_ingestions:
@@ -635,8 +667,37 @@ class Ingestor(object):
         ''' Call the ingestion command for each batch of files in the Ingestor object's queue. '''
         for batch in self.queue:
             self.logger.info('')
-            self.logger.info("Ingesting %s files for %s from the queue." % (len(batch['files']), batch['mask']))
+            self.logger.info(
+                "Ingesting %s files for %s from the queue." % (len(batch['files']), batch['mask']))
             self.send(batch['files'], batch['deployment_number'])
+
+    def ingest_from_queue_multiprocess(self, max_concurrent_jobs=5):
+        ''' Call the ingestion command for each batch of files in the Ingestor object's queue, 
+            using multiple processes to concurrently send batches. '''
+        import multiprocessing
+
+        if max_concurrent_jobs < 1:
+            max_concurrent_jobs = 1
+
+        self.logger.info('')
+        job_slots = []
+        for batch in self.queue:
+            # Wait for any job slots to become available
+            while len(job_slots) == max_concurrent_jobs:
+                job_slots = [j for j in jobs if j.is_alive()]
+
+            # Create, track, and start the job.
+            job = multiprocessing.Process(
+                target=self.send, args=(batch['files'], batch['deployment_number']))
+            job_slots.append(job)
+            job.start()
+            self.logger.info(
+                "Ingesting %s files for %s from the queue in PID %s." % (
+                    len(batch['files']), batch['mask'], job.pid))
+
+        while any([job for job in job_slots if job.is_alive()]):
+            pass
+        self.logger.info("All batches completed.")
 
     def send(self, files, deployment_number):
         ''' Calls UFrame's ingest sender application with the appropriate command-line arguments 
@@ -721,7 +782,8 @@ if __name__ == '__main__':
         )) + ".log"
     logger.setup_logging(
         log_file_name=log_file_name,
-        send_mail="-no-email" not in args and EMAIL['enabled'])
+        send_mail="-no-email" not in args and EMAIL['enabled'],
+        info_to_console="-verbose" in args)
     main_logger = logging.getLogger('Main')
 
     # If the -h argument is passed at the command line, display the internal documentation and exit.

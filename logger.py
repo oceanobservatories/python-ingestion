@@ -22,6 +22,12 @@ DEFAULTS = {
             'level': 'INFO',
             'formatter': 'simple',
             },
+        'info_to_console': {
+            'class': 'logging.StreamHandler',
+            'level': 'INFO',
+            'formatter': 'raw',
+            'stream': 'ext://sys.stdout',
+            },
         'errors_to_console': {
             'class': 'logging.StreamHandler',
             'level': 'ERROR',
@@ -50,11 +56,13 @@ DEFAULTS = {
         },
     }
 
-def setup_logging(log_file_name=None, send_mail=True):
+def setup_logging(log_file_name=None, send_mail=True, info_to_console=False):
     logging_config = DEFAULTS
     log_file_name = log_file_name or datetime.today().strftime('ingestion_%Y_%m_%d.log')
     if send_mail:
         logging_config['loggers']['']['handlers'] += ['errors_to_email']
+    if info_to_console:
+        logging_config['loggers']['']['handlers'].append('info_to_console')
     if log_file_name:
         logging_config['handlers']['file_handler']['filename'] = "/".join((
             UFRAME['log_path'], log_file_name))
