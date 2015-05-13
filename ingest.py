@@ -51,7 +51,6 @@ from config import (
 
 import logger
 import email_notifications
-from dill_pool import apply_async
 
 import qpid.messaging as qm
 
