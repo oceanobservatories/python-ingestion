@@ -683,7 +683,7 @@ class Ingestor(object):
         for batch in self.queue:
             # Wait for any job slots to become available
             while len(job_slots) == max_concurrent_jobs:
-                job_slots = [j for j in jobs if j.is_alive()]
+                job_slots = [j for j in job_slots if j.is_alive()]
 
             # Create, track, and start the job.
             job = multiprocessing.Process(
