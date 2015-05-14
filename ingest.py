@@ -36,13 +36,16 @@ Error Codes:
 
 '''
 
-import sys, os, subprocess
+import sys, os, subprocess, multiprocessing
 import logging, logging.config, mailinglogger
 import csv
+import yaml
+
 from datetime import datetime, timedelta
 from time import sleep
 from glob import glob
 from whelk import shell, pipe
+from qpid import messaging as qm
 
 from config import (
     SERVER, SLEEP_TIMER,
@@ -51,8 +54,6 @@ from config import (
 
 import logger
 import email_notifications
-
-import qpid.messaging as qm
 
 def set_options(object, attrs, options):
     defaults = {
@@ -114,7 +115,6 @@ class Task(object):
     # A list of methods on the Task class that are valid ingestion tasks.
     valid_tasks = (
         'from_csv',         # Ingest from a single CSV file.
-        'from_csv_m',       # Ingest from a single CSV file.
         'from_csv_batch',   # Ingest from multiple CSV files defined in a batch.
         'dummy',            # A dummy task. Doesn't do anything.
         ) 
@@ -190,36 +190,6 @@ class Task(object):
             csv_file.split("/")[-1].split(".")[0])
         if not self.options['commands_only']:
             ingestor.ingest_from_queue()
-
-        # Write out any failed ingestions to a new CSV file.
-        if ingestor.failed_ingestions:
-            ingestor.write_failures_to_csv(
-                csv_file.split("/")[-1].split(".")[0])
-
-        self.logger.info('')
-        self.logger.info("Ingestion completed.")
-        self.mailer.ingestion_completed(csv_file)
-        return True
-
-    def from_csv_m(self):
-        ''' Ingest data mapped out by a single CSV file. '''
-
-        # Check to see if a valid CSV has been specified.
-        try:
-            csv_file = [f for f in self.args if f[-4:].lower()==".csv"][0]
-        except IndexError:
-            self.logger.error("No mapping CSV specified.")
-            return False
-
-        # Create an instance of the Ingestor class with common options set.
-        ingestor = Ingestor(**self.options)
-
-        # Ingest from the CSV file.
-        ingestor.load_queue_from_csv(csv_file)
-        ingestor.write_queue_to_file(
-            csv_file.split("/")[-1].split(".")[0])
-        if not self.options['commands_only']:
-            ingestor.ingest_from_queue_multiprocess()
 
         # Write out any failed ingestions to a new CSV file.
         if ingestor.failed_ingestions:
@@ -459,6 +429,20 @@ class Ingestor(object):
         if not self.service_manager.refresh_status():
             self.service_manager.action("start")
 
+    @staticmethod
+    def update_max_jobs(max_jobs, previous_timestamp):
+        try:
+            jobs_config_file = "jobs.yml"
+            if os.path.isfile(jobs_config_file):
+                last_updated = datetime.fromtimestamp(os.path.getmtime(jobs_config_file))
+                if last_updated == previous_timestamp:
+                    return max_jobs, last_updated
+                else:
+                    return yaml.load(open(jobs_config_file))['MAX_CONCURRENT_JOBS'], last_updated
+        except:
+            pass
+        return 1, previous_timestamp
+
     def get_qpid_sender(self, route):
         ''' Connect or retrieve an already connected QPID sender for a specific route.'''
         qpid_sender = self.qpid_senders.get(route, None)
@@ -663,26 +647,17 @@ class Ingestor(object):
         self.logger.info('Wrote ingestion commands for files in queue to %s.' % commands_file)
 
     def ingest_from_queue(self):
-        ''' Call the ingestion command for each batch of files in the Ingestor object's queue. '''
-        for batch in self.queue:
-            self.logger.info('')
-            self.logger.info(
-                "Ingesting %s files for %s from the queue." % (len(batch['files']), batch['mask']))
-            self.send(batch['files'], batch['deployment_number'])
-
-    def ingest_from_queue_multiprocess(self, max_concurrent_jobs=5):
         ''' Call the ingestion command for each batch of files in the Ingestor object's queue, 
             using multiple processes to concurrently send batches. '''
-        import multiprocessing
 
-        if max_concurrent_jobs < 1:
-            max_concurrent_jobs = 1
+        max_jobs, max_jobs_last_updated = self.update_max_jobs(1, datetime.now())
 
         self.logger.info('')
         job_slots = []
         for batch in self.queue:
             # Wait for any job slots to become available
-            while len(job_slots) == max_concurrent_jobs:
+            while len(job_slots) == max_jobs:
+                max_jobs, max_jobs_last_updated = self.update_max_jobs(max_jobs, max_jobs_last_updated)
                 job_slots = [j for j in job_slots if j.is_alive()]
 
             # Create, track, and start the job.
@@ -694,8 +669,10 @@ class Ingestor(object):
                 "Ingesting %s files for %s from the queue in PID %s." % (
                     len(batch['files']), batch['mask'], job.pid))
 
+        # Wait for all jobs to end completely.
         while any([job for job in job_slots if job.is_alive()]):
             pass
+
         self.logger.info("All batches completed.")
 
     def send(self, files, deployment_number):
@@ -712,6 +689,8 @@ class Ingestor(object):
                 'data_source': source,
                 }
 
+        sender_process = multiprocessing.current_process()
+
         # Ingest each file in the file list.
         previous_data_file = ""
         for data_file, routes in files:
@@ -726,7 +705,7 @@ class Ingestor(object):
                 ingestion_command = ("ingestsender", 
                     uframe_route, data_file, reference_designator, data_source, deployment_number)
                 try:
-                    # Attempt to send the data file over qpid to uframe.
+                    # Attempt to send the data file over QPID to uFrame.
                     ingestion_command_string = " ".join(ingestion_command)
                     if self.test_mode:
                         ingestion_command_string = "TEST MODE: " + ingestion_command_string
@@ -743,7 +722,7 @@ class Ingestor(object):
                         annotate_parameters(data_file, uframe_route, reference_designator, data_source))
                 else:
                     # If there are no errors, consider the ingest send a success and log it.
-                    self.logger.info(ingestion_command_string)
+                    self.logger.info("PID: %s | %s" % (str(sender_process.pid), ingestion_command_string))
                 previous_data_file = data_file
             sleep(self.sleep_timer)
         return True
