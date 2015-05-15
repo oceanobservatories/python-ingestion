@@ -649,28 +649,27 @@ class Ingestor(object):
     def ingest_from_queue(self):
         ''' Call the ingestion command for each batch of files in the Ingestor object's queue, 
             using multiple processes to concurrently send batches. '''
-
         max_jobs, max_jobs_last_updated = self.update_max_jobs(1, datetime.now())
 
         self.logger.info('')
-        job_slots = []
+        pool = []
         for batch in self.queue:
             # Wait for any job slots to become available
-            while len(job_slots) == max_jobs:
+            while len(pool) == max_jobs:
                 max_jobs, max_jobs_last_updated = self.update_max_jobs(max_jobs, max_jobs_last_updated)
-                job_slots = [j for j in job_slots if j.is_alive()]
+                pool = [j for j in pool if j.is_alive()]
 
             # Create, track, and start the job.
             job = multiprocessing.Process(
                 target=self.send, args=(batch['files'], batch['deployment_number']))
-            job_slots.append(job)
+            pool.append(job)
             job.start()
             self.logger.info(
                 "Ingesting %s files for %s from the queue in PID %s." % (
                     len(batch['files']), batch['mask'], job.pid))
 
         # Wait for all jobs to end completely.
-        while any([job for job in job_slots if job.is_alive()]):
+        while any([job for job in pool if job.is_alive()]):
             pass
 
         self.logger.info("All batches completed.")
@@ -772,13 +771,17 @@ if __name__ == '__main__':
     # Run the task with the arguments.
     perform = Task(args)
     if task in Task.valid_tasks:
-        main_logger.info("-")
+        task_start_time = datetime.now()
         main_logger.info(
             "Running ingestion task '%s' with command-line arguments '%s'" % (
                 task, " ".join(args)))
+        main_logger.info('')
         try:
             getattr(perform, task)()
         except Exception:
             main_logger.exception("There was an unexpected error.")
+        
     else:
         main_logger.error("%s is not a valid ingestion task." % task)
+    task_duration = datetime.now() - task_start_time
+    main_logger.info("Task completed in %s." % str(task_duration).split('.')[0])
