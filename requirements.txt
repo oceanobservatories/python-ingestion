@@ -5,3 +5,4 @@ PyYAML==3.11
 SQLAlchemy==0.9.9
 whelk==2.4
 http://apache.claz.org/qpid/0.32/qpid-python-0.32.tar.gz
+yappi==0.94

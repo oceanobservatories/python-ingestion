@@ -1,1 +1,12 @@
-MAX_CONCURRENT_JOBS: 1
+# If you're in jobs.yml.template, copy this file to jobs.yml and adjust options as necessary.
+# 
+# Set MAX_CONCURRENT_JOBS to a positive integer. This indicates how many concurrent processes the 
+# script is allowed to spawn. This value can be changed while the script is running; the script 
+# will recognize a change based on the last-modified property of this file and adjust the maximum 
+# concurrent tasks accordingly.
+# 
+# Increasing the value will spawn a new process immediately and start a job, but decreasing the 
+# value will not stop or consolidate any already running processes; the processes will run to 
+# completion and no new processes will be spawned in excess of the specified value.
+
+MAX_CONCURRENT_JOBS: 1 

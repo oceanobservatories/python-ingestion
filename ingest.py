@@ -1,4 +1,25 @@
 #!/usr/bin/env python
+import yappi
+
+import sys, os, subprocess, multiprocessing
+import logging, logging.config, mailinglogger
+import csv
+import yaml
+
+from datetime import datetime, timedelta
+from time import sleep
+from glob import glob
+from whelk import shell, pipe
+from qpid import messaging as qm
+
+from config import (
+    SERVER, SLEEP_TIMER,
+    MAX_FILE_AGE, START_DATE, END_DATE, QUICK_LOOK_QUANTITY,
+    UFRAME, EDEX, EMAIL)
+
+import logger
+import email_notifications
+
 INTERNAL_DOCUMENTATION = '''
 Data Ingestion Script
 Usage: python ingest.py [task] [options]
@@ -35,25 +56,6 @@ Error Codes:
                  5  An integer value was not specified for any of the override options.
 
 '''
-
-import sys, os, subprocess, multiprocessing
-import logging, logging.config, mailinglogger
-import csv
-import yaml
-
-from datetime import datetime, timedelta
-from time import sleep
-from glob import glob
-from whelk import shell, pipe
-from qpid import messaging as qm
-
-from config import (
-    SERVER, SLEEP_TIMER,
-    MAX_FILE_AGE, START_DATE, END_DATE, QUICK_LOOK_QUANTITY,
-    UFRAME, EDEX, EMAIL)
-
-import logger
-import email_notifications
 
 def set_options(object, attrs, options):
     defaults = {
@@ -599,6 +601,7 @@ class Ingestor(object):
                     valid_routes.append(p)
                 if len(valid_routes) > 0:
                     filtered_data_files.append((data_file, valid_routes))
+
                 ''' If a quick look quantity is set (either through the config.yml or the command-line argument), exit 
                     the loop once the quick look quantity is met. '''
                 if self.quick_look_quantity and self.quick_look_quantity == len(filtered_data_files):
