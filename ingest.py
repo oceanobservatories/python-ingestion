@@ -1,6 +1,4 @@
 #!/usr/bin/env python
-import yappi
-
 import sys, os, subprocess, multiprocessing
 import logging, logging.config, mailinglogger
 import csv
@@ -34,6 +32,7 @@ Tasks:
 
 Options:
                 -h  Display this help message.
+                -v  Verbose mode. Outputs the script's INFO and ERROR messages to the console while the script runs.
                 -t  Test Mode. 
                         The script will go through all of the motions of ingesting data, but will not call any ingest 
                         sender commands.
@@ -108,6 +107,7 @@ class QpidSender:
                     "deliveryType": delivery_type,
                     "deploymentNumber": deployment_number,
                     }))
+
     def disconnect(self):
         self.connection.close()
 
@@ -163,6 +163,7 @@ class Task(object):
         # Create a Mailer for non-logging based email notifications.
         self.mailer = email_notifications.Mailer(self.options)
 
+    @profile
     def dummy(self):
         ''' The dummy task is used for testing basic initialization functions. It creates an Ingestor (which in turn 
             creates a ServiceManager) and outputs all of the script's options to the log and sends an email 
@@ -763,7 +764,7 @@ if __name__ == '__main__':
     logger.setup_logging(
         log_file_name=log_file_name,
         send_mail="-no-email" not in args and EMAIL['enabled'],
-        info_to_console="-verbose" in args)
+        info_to_console="-v" in args)
     main_logger = logging.getLogger('Main')
 
     # If the -h argument is passed at the command line, display the internal documentation and exit.
