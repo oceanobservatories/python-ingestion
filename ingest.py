@@ -163,7 +163,6 @@ class Task(object):
         # Create a Mailer for non-logging based email notifications.
         self.mailer = email_notifications.Mailer(self.options)
 
-    @profile
     def dummy(self):
         ''' The dummy task is used for testing basic initialization functions. It creates an Ingestor (which in turn 
             creates a ServiceManager) and outputs all of the script's options to the log and sends an email 
