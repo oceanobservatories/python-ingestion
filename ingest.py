@@ -3,6 +3,7 @@ import sys, os, subprocess, multiprocessing
 import logging, logging.config, mailinglogger
 import csv
 import yaml
+import requests
 
 from datetime import datetime, timedelta
 from time import sleep
@@ -27,6 +28,8 @@ Tasks:
                     Requires a filename argument with a .csv extension.
     from_csv_batch  Ingest data from multiple CSV files defined in a batch file.  
                     Requires a filename argument with a .csv.batch extension.
+           from_dir Ingest data from CSVs contained in the specified directory.
+                    Requires a path argument.
              dummy  A dummy task that creates an Ingestor but doesn't try to ingest any data. 
                     Used for testing.
 
@@ -118,6 +121,7 @@ class Task(object):
     valid_tasks = (
         'from_csv',         # Ingest from a single CSV file.
         'from_csv_batch',   # Ingest from multiple CSV files defined in a batch.
+        'from_dir',         # Ingest from multiple CSV files in a directory.
         'dummy',            # A dummy task. Doesn't do anything.
         ) 
 
@@ -164,9 +168,9 @@ class Task(object):
         self.mailer = email_notifications.Mailer(self.options)
 
     def dummy(self):
-        ''' The dummy task is used for testing basic initialization functions. It creates an Ingestor (which in turn 
-            creates a ServiceManager) and outputs all of the script's options to the log and sends an email 
-            notification with the same information. '''
+        ''' The dummy task is used for testing basic initialization functions. It creates an 
+            Ingestor (which in turn creates a ServiceManager) and outputs all of the script's 
+            options to the log and sends an email notification with the same information. '''
         ingestor = Ingestor(**self.options)
         self.logger.info("Dummy task was run with the following options:")
         for option in sorted(["%s: %s" % (o, self.options[o]) for o in self.options]):
@@ -174,7 +178,7 @@ class Task(object):
         self.mailer.options_summary()
 
     def from_csv(self):
-        ''' Ingest data mapped out by a single CSV file. '''
+        ''' Ingest from a single CSV file. '''
 
         # Check to see if a valid CSV has been specified.
         try:
@@ -183,33 +187,12 @@ class Task(object):
             self.logger.error("No mapping CSV specified.")
             return False
 
-        # Create an instance of the Ingestor class with common options set.
-        ingestor = Ingestor(**self.options)
-
-        # Ingest from the CSV file.
-        ingestor.load_queue_from_csv(csv_file)
-        ingestor.write_queue_to_file(
-            csv_file.split("/")[-1].split(".")[0])
-        if not self.options['commands_only']:
-            ingestor.ingest_from_queue()
-
-        # Write out any failed ingestions to a new CSV file.
-        if ingestor.failed_ingestions:
-            ingestor.write_failures_to_csv(
-                csv_file.split("/")[-1].split(".")[0])
-
-        self.logger.info('')
-        self.logger.info("Ingestion completed.")
-        self.mailer.ingestion_completed(csv_file)
-        return True
+        self.csv_ingestion([csv_file], csv_file.split("/")[-1].split(".")[0])
 
     def from_csv_batch(self):
-        ''' Ingest data mapped out by multiple CSV files, defined in a single .csv.batch file.'''
+        ''' Ingest from multiple CSV files, defined in a single .csv.batch file.'''
 
-        # Create an instance of the Ingestor class with common options set.
-        ingestor = Ingestor(**self.options)
-
-        # Open the batch list file and parse the csv paths into a list
+        # Open the batch list file and parse the CSV paths into a list.
         try:
             csv_batch = [f for f in self.args if f[-10:].lower()==".csv.batch"][0]
         except IndexError:
@@ -218,23 +201,44 @@ class Task(object):
         with open(csv_batch, 'r') as f:
             csv_files = [x.strip() for x in f.readlines() if x.strip()]
 
+        self.csv_ingestion(csv_files, csv_batch.split("/")[-1].split(".")[0] + "_batch")
+
+    def from_dir(self):
+        ''' Ingest from multiple CSV files, located in a directory.'''
+        
+        # Get the directory from the args and load the CSV files into a list.
+        csv_dir = ([d for d in self.args if os.path.isdir(d)][0:] or [None])[0]
+        if not csv_dir:
+            self.logger.error("No valid directory specified.")
+            return False
+        csv_files = [os.path.abspath(f) for f in os.listdir(csv_dir) if f.endswith(".csv")]
+        if not csv_files:
+            self.logger.error("No CSV files in specified directory.")
+
+        self.csv_ingestion(csv_files, 
+            (csv_dir == "." and "local" or csv_dir.split("/")[-1]) + "_dir")
+
+
+    def csv_ingestion(self, csv_files, log_file_name):
+        # Create an instance of the Ingestor class with common options set.
+        ingestor = Ingestor(**self.options)
+
         # Ingest from each CSV file.
         for csv_file in csv_files:
             ingestor.load_queue_from_csv(csv_file)
-        ingestor.write_queue_to_file(
-            csv_batch.split("/")[-1].split(".")[0] + "_batch")
+        ingestor.write_queue_to_file(log_file_name)
         if not self.options['commands_only']:
             ingestor.ingest_from_queue()
 
         # Write out any failed ingestions from the entire batch to a new CSV file.
         if ingestor.failed_ingestions:
-            ingestor.write_failures_to_csv(
-                csv_batch.split("/")[-1].split(".")[0] + "_batch")
+            ingestor.write_failures_to_csv(log_file_name)
 
         self.logger.info('')
         self.logger.info("Ingestion completed.")
-        self.mailer.ingestion_completed(csv_batch)
+        self.mailer.ingestion_completed(log_file_name)
         return True
+
 
 class ServiceManager(object):
     ''' A helper class that manages the services that the ingestion depends on.'''
@@ -358,15 +362,24 @@ class ServiceManager(object):
                         "One or more EDEX services crashed after ingesting the previous data file (%s)."
                         "The services were restarted successfully and ingestion will continue."
                         ) % previous_data_file)
-                return
+                break
             self.logger.warn(
-                "One or more EDEX services crashed after ingesting the previous data file (%s)." % previous_data_file)
+                ("One or more EDEX services crashed after ingesting the previous data file (%s)."
+                    ) % previous_data_file)
             crashed = True
             if EDEX['auto_restart']:
                 self.logger.warn("Attempting to restart the services.")
                 self.restart()
             else:
                 self.logger.warn("Waiting for external processes to restart the services.")
+        while True:
+            if requests.get(EDEX['health_check_url']).status_code == 200:
+                break
+            self.logger.warn("uFrame Health Check failed, pausing ingestion.")
+            while True:
+                if requests.get(EDEX['health_check_url']).status_code == 200:
+                    break
+        return True
 
     def process_log(self, log_file):
         ''' Processes an EDEX log and creates a new log file with only the relevant, 
@@ -388,7 +401,8 @@ class ServiceManager(object):
                 return
             else:
                 self.logger.info(
-                    "%s has already been processed, but has been modified and will be re-processed." % log_file)
+                    ("%s has already been processed, but has been modified and will be re-processed."
+                        ) % log_file)
 
         result = shell.zgrep("Finished Processing file", log_file)[1]
         with open(new_log_file, "w") as outfile:
@@ -426,7 +440,8 @@ class Ingestor(object):
         self.failed_ingestions = []
         self.qpid_senders = {}
 
-        ''' Instantiate a ServiceManager for this Ingestor and start the services if any are not running. '''
+        ''' Instantiate a ServiceManager for this Ingestor and start the services if any are not 
+            running. '''
         self.service_manager = options.get('service_manager', ServiceManager(**options))
         if not self.service_manager.refresh_status():
             self.service_manager.action("start")
@@ -460,8 +475,8 @@ class Ingestor(object):
             self.qpid_senders[route].disconnect()
 
     def load_queue_from_csv(self, csv_file):
-        ''' Reads the specified CSV file for mask, route, designator, and source parameters and loads the Ingestor 
-            object's queue with a batch with those matching parameters.'''
+        ''' Reads the specified CSV file for mask, route, designator, and source parameters and 
+            loads the Ingestor object's queue with a batch with those matching parameters.'''
 
         try:
             reader = csv.DictReader(open(csv_file))
@@ -476,7 +491,8 @@ class Ingestor(object):
             return False
 
         def commented(row):
-            ''' Check to see if the row is commented out. Any field that starts with # indictes a comment.'''
+            ''' Check to see if the row is commented out. Any field that starts with # indictes a 
+                comment.'''
             return bool([v for v in row.itervalues() if v and v.startswith("#")])
 
         routes = {}
@@ -498,7 +514,8 @@ class Ingestor(object):
             self.load_queue(mask, routes[mask])
 
     def load_queue(self, mask, routes):
-        ''' Finds the files that match the filename_mask parameter and loads them into the Ingestor object's queue. '''
+        ''' Finds the files that match the filename_mask parameter and loads them into the 
+            Ingestor object's queue. '''
 
         # Get a list of files that match the file mask and log the list size.
         data_files = sorted(glob(mask))
@@ -541,15 +558,16 @@ class Ingestor(object):
 
         # If a maximum file age is set, only ingest files that fall within that age.
         if self.max_file_age:
-            self.logger.info("Maximum file age set to %s seconds, filtering file list." % (self.max_file_age))
+            self.logger.info(
+                "Maximum file age set to %s seconds, filtering file list." % (self.max_file_age))
             current_time = datetime.now()
             age = timedelta(seconds=self.max_file_age)
             data_files = [
                 f for f in data_files
                 if current_time - datetime.fromtimestamp(os.path.getmtime(f)) < age]
 
-        ''' Check if the data_file has previously been ingested. If it has, then skip it, unless force mode (-f) is 
-            active. '''
+        ''' Check if the data_file has previously been ingested. If it has, then skip it, unless 
+            force mode (-f) is active. '''
         filtered_data_files = []
         if self.force_mode:
             # If force mode is active, add all data files to the queue with the respective routes.
@@ -602,8 +620,8 @@ class Ingestor(object):
                 if len(valid_routes) > 0:
                     filtered_data_files.append((data_file, valid_routes))
 
-                ''' If a quick look quantity is set (either through the config.yml or the command-line argument), exit 
-                    the loop once the quick look quantity is met. '''
+                ''' If a quick look quantity is set (either through the config.yml or the 
+                    command-line argument), exit the loop once the quick look quantity is met. '''
                 if self.quick_look_quantity and self.quick_look_quantity == len(filtered_data_files):
                     self.logger.info(
                         "%s of %s file(s) from %s set for quick look ingestion." % (
@@ -659,7 +677,8 @@ class Ingestor(object):
         for batch in self.queue:
             # Wait for any job slots to become available
             while len(pool) == max_jobs:
-                max_jobs, max_jobs_last_updated = self.update_max_jobs(max_jobs, max_jobs_last_updated)
+                max_jobs, max_jobs_last_updated = self.update_max_jobs(
+                    max_jobs, max_jobs_last_updated)
                 pool = [j for j in pool if j.is_alive()]
 
             # Create, track, and start the job.
@@ -679,7 +698,7 @@ class Ingestor(object):
 
     def send(self, files, deployment_number):
         ''' Calls UFrame's ingest sender application with the appropriate command-line arguments 
-            for all files specified in the data_files list. '''
+            for all files specified in the files list. '''
 
         # Define some helper methods.
         def annotate_parameters(filename, route, designator, source):
@@ -721,10 +740,12 @@ class Ingestor(object):
                         "There was a problem with qpid when ingesting %s (Exception %s)." % (
                             data_file, e))
                     self.failed_ingestions.append(
-                        annotate_parameters(data_file, uframe_route, reference_designator, data_source))
+                        annotate_parameters(
+                            data_file, uframe_route, reference_designator, data_source))
                 else:
                     # If there are no errors, consider the ingest send a success and log it.
-                    self.logger.info("PID: %s | %s" % (str(sender_process.pid), ingestion_command_string))
+                    self.logger.info(
+                        "PID: %s | %s" % (str(sender_process.pid), ingestion_command_string))
                 previous_data_file = data_file
             sleep(self.sleep_timer)
         return True
@@ -765,6 +786,7 @@ if __name__ == '__main__':
         send_mail="-no-email" not in args and EMAIL['enabled'],
         info_to_console="-v" in args)
     main_logger = logging.getLogger('Main')
+    logging.getLogger("requests").setLevel(logging.WARNING)
 
     # If the -h argument is passed at the command line, display the internal documentation and exit.
     if "-h" in sys.argv:
