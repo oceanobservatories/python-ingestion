@@ -287,9 +287,9 @@ class ServiceManager(object):
         try:
             if self.test_mode:
                 self.logger.info("TEST MODE: " + command_string)
-            else:
+            else:cd pyth
                 self.logger.info(command_string)
-                check_output = subprocess.check_output(command)
+                check_output = shell[command]()[1]
         except Exception:
             self.logger.exception("An error occurred when %sing services." % verbose_action)
             log_and_exit(4)
@@ -324,7 +324,7 @@ class ServiceManager(object):
             if self.test_mode:
                 status = "edex_ooi: test\npostgres: test\nqpidd: test\npypies: test test \n"
             else:
-                status = subprocess.check_output([self.edex_command, "all", "status"])
+                status = shell[self.edex_command]("all", "status")[1]
         except Exception:
             self.logger.exception("An error occurred when checking the service statuses.")
             log_and_exit(4)
