@@ -287,7 +287,7 @@ class ServiceManager(object):
         try:
             if self.test_mode:
                 self.logger.info("TEST MODE: " + command_string)
-            else:cd pyth
+            else:
                 self.logger.info(command_string)
                 check_output = shell[command]()[1]
         except Exception:
