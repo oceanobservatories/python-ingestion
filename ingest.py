@@ -289,7 +289,7 @@ class ServiceManager(object):
                 self.logger.info("TEST MODE: " + command_string)
             else:
                 self.logger.info(command_string)
-                subprocess.check_output(command)
+                check_output = subprocess.check_output(command)
         except Exception:
             self.logger.exception("An error occurred when %sing services." % verbose_action)
             log_and_exit(4)
