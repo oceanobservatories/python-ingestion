@@ -125,6 +125,7 @@ class Task(object):
         'from_csv',         # Ingest from a single CSV file.
         'from_csv_batch',   # Ingest from multiple CSV files defined in a batch.
         'from_dir',         # Ingest from multiple CSV files in a directory.
+        'single_file',      # Ingest from a single file
         'dummy',            # A dummy task. Doesn't do anything.
         ) 
 
@@ -181,6 +182,41 @@ class Task(object):
         for option in sorted(["%s: %s" % (o, self.options[o]) for o in self.options]):
             self.logger.info(option)
         self.mailer.options_summary()
+
+    def single_file(self):
+        # read in command line options
+        self.logger.info("Importing Single File")
+        self.options['force_mode'] = True
+        f_tosend = ''
+        param_search_space = ''
+        params = None
+        if len(self.args) == 1:
+            self.logger.info("Only File Given")
+            f_tosend= self.args[0]
+        if len(self.args) == 3 and self.args[1] == '--params':
+            self.logger.info("Only File and search location given")
+            f_tosend = self.args[0]
+        elif len(self.args) == 5:
+            self.logger.info("All Parameters Defined")
+            f_tosend = self.args[1]
+            params = {
+                'uframe_route' : self.args[0],
+                'reference_designator' : self.args[2],
+                'data_source' : self.args[3],
+            }
+            deployment = self.args[4]
+        else:
+            self.logger.error("Invalid command line arguments!")
+            return
+        if params is None:
+            self.logger.error("Search for Parameters Not implemented")
+            return
+
+        ing = Ingestor(**self.options)
+        files = [[f_tosend, [params] ]]
+        ing.send(files, deployment)
+
+
 
     def from_csv(self):
         ''' Ingest from a single CSV file. '''
