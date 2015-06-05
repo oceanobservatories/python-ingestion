@@ -30,7 +30,7 @@ Tasks:
                     Requires a filename argument with a .csv.batch extension.
            from_dir Ingest data from CSVs contained in the specified directory.
                     Requires a path argument.
-             dummy  A dummy task that creates an Ingestor but doesn't try to ingest any data. 
+             dummy  A dummy task that creates an Ingestor but doesn't try to ingest any data.
                     Used for testing.
 
 Options:
