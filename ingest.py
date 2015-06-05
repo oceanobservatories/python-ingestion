@@ -46,7 +46,7 @@ Options:
                         The script will disregard the EDEX log file checks for already ingested data and ingest all 
                         matching files.
          -no-email  Don't send email notifications.
-        --no-check  Don't check to see if edex is alive after every input
+   --no-check-edex  Don't check to see if edex is alive after every input
          --sleep=n  Override the sleep timer with a value of n seconds.
      --startdate=d  Only ingest files newer than the specified start date d (in the YYYY-MM-DD format).
        --enddate=d  Only ingest files older than the specified end date d (in the YYYY-MM-DD format).
@@ -72,7 +72,7 @@ def set_options(object, attrs, options):
         'quick_look_quantity': None,
         'edex_command': EDEX['command'],
         'no_email': False,
-        'no_check': False,
+        'no_check_edex': False,
         }
     for attr in attrs:
         setattr(object, attr, options.get(attr, defaults[attr]))
@@ -157,7 +157,7 @@ class Task(object):
             'force_mode': "-f" in args,
             'commands_only': '-c' in args, 
             'no_email': '-no-email' in args,
-            'no_check': '--no-check' in args,
+            'no_check_edex': '--no-check-edex' in args,
             'sleep_timer': switch_value("sleep", float) or SLEEP_TIMER,
             'max_file_age': switch_value("age", int) or MAX_FILE_AGE,
             'start_date': switch_value("startdate", get_date) or get_date(START_DATE),
@@ -442,7 +442,7 @@ class Ingestor(object):
         set_options(self, (
                 'test_mode', 'force_mode', 'sleep_timer', 
                 'start_date', 'end_date', 'max_file_age', 
-                'quick_look_quantity', 'no_check'),
+                'quick_look_quantity', 'no_check_edex'),
             options)
         self.queue = []
         self.failed_ingestions = []
@@ -729,10 +729,9 @@ class Ingestor(object):
                 data_source = r['data_source']
 
                 # Check if the EDEX services are still running. If not, attempt to restart them.
-                if not self.no_check:
+                if not self.no_check_edex:
                     self.service_manager.wait_until_ready(previous_data_file)
-
-                ingestion_command = ("ingestsender", 
+                ingestion_command = ("ingestsender",
                     uframe_route, data_file, reference_designator, data_source, deployment_number)
                 try:
                     # Attempt to send the data file over QPID to uFrame.
