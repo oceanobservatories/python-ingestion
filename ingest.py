@@ -246,7 +246,7 @@ class Task(object):
         name of the file we are parsing."""
         pfile = None
         # if we are given a csv file we immediatly have the file to read parameters from
-        if os.path.isfile(param_search_space) and os.path.splitext()[1] == '.csv':
+        if os.path.isfile(param_search_space) and os.path.splitext(param_search_space)[1] == '.csv':
             pfile = param_search_space
         else:
             # Do a search from the given location
