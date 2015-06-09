@@ -22,6 +22,7 @@ EDEX:
     cooldown: 60                                                 # The wait time (in seconds) after EDEX services are started by the script.
     auto_restart: False                                          # Set to True to have the script attempt to restart services if they crash.
     health_check_url: http://127.0.0.1:12576/sensor/inv
+    health_check_enable: True
 
 EMAIL: # Used for email notifications of errors. Requires a valid SMTP server to work.
     enabled: False
