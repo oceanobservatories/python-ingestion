@@ -31,11 +31,21 @@ Remember to activate the virtualenv before using the script.
                     Requires a filename argument with a .csv extension.
     from_csv_batch  Ingest data from multiple CSV files defined in a batch file.  
                     Requires a filename argument with a .csv.batch extension.
+          from_dir  Ingest data from CSVs contained in the specified directory.
+                              Requires a path argument.
+        single_file Only ingest a single file. This option will ingest a signle data file.  Depending on the rest
+                    of the command line options this option will search for the correct values to send to the ingest queue. 
+                    If only a file is given it will search the ingest_csvs directory for the file containing all of the ingest
+                    parameters needed.  if --param `location` is passed it will read the location to see if it is the csv file that contains
+                    the correct parameters and load them.  If it is not the correct csv file it will begin a recursive search from that location
+                    to find the file.  
+                    Finally the parameters can all be passed to the command line to ingest a file if known: uframe_route file reference_designator data_source deployment
              dummy  A dummy task that creates an Ingestor but doesn't try to ingest any data. 
                     Used for testing.
 
     Options:
                 -h  Display this help message.
+                -v  Verbose mode. Outputs the script's INFO and ERROR messages to the console while the script runs.
                 -t  Test Mode. 
                         The script will go through all of the motions of ingesting data, but will not 
                         call any ingest sender commands.
@@ -46,6 +56,7 @@ Remember to activate the virtualenv before using the script.
                         The script will disregard the EDEX log file checks for already ingested data 
                         and ingest all matching files.
          -no-email  Don't send email notifications.
+   --no-check-edex  Don't check to see if edex is alive after every input.
          --sleep=n  Override the sleep timer with a value of n seconds.
      --startdate=d  Only ingest files newer than the specified start date d (in the YYYY-MM-DD format).
        --enddate=d  Only ingest files older than the specified end date d (in the YYYY-MM-DD format).
