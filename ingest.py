@@ -75,6 +75,7 @@ def set_options(object, attrs, options):
         'edex_command': EDEX['command'],
         'no_email': False,
         'no_check_edex': False,
+        'health_check_enabled': EDEX['health_check_enabled'],
         }
     for attr in attrs:
         setattr(object, attr, options.get(attr, defaults[attr]))
@@ -168,6 +169,7 @@ class Task(object):
             'cooldown': switch_value("cooldown", int) or EDEX['cooldown'],
             'quick_look_quantity': switch_value("quick", int) or QUICK_LOOK_QUANTITY,
             'edex_command': EDEX['command'],
+            'health_check_enabled': EDEX['health_check_enabled'],
             }
         self.args = args
     
@@ -366,7 +368,7 @@ class ServiceManager(object):
     ''' A helper class that manages the services that the ingestion depends on.'''
 
     def __init__(self, **options):
-        set_options(self, ('test_mode', 'edex_command', 'cooldown'), options)
+        set_options(self, ('test_mode', 'edex_command', 'cooldown', 'health_check_enabled', ), options)
 
         self.logger = logging.getLogger('Services')
 
@@ -496,7 +498,7 @@ class ServiceManager(object):
                 self.restart()
             else:
                 self.logger.warn("Waiting for external processes to restart the services.")
-        while True:
+        while self.health_check_enabled:
             if requests.get(EDEX['health_check_url']).status_code == 200:
                 break
             self.logger.warn("uFrame Health Check failed, pausing ingestion.")
