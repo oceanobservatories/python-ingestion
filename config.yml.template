@@ -8,6 +8,7 @@ MAX_FILE_AGE: null          # The max age of a file (in seconds) to ingest. Use 
 QUICK_LOOK_QUANTITY: null   # The max number of files per file mask to ingest. Used for quick look ingestions.
 START_DATE: null            # The earliest date a file can have to be included in ingestion (YYYY-MM-DD).
 END_DATE: null              # The latest date a file can have to be included in ingestion (YYYY-MM-DD).
+INGEST_CSVS: null           # The path to the ingestion-csvs repository which contains ingest parameters.
 
 UFRAME:
     command: /home/developer/uframes/ooi/bin/ingestsender        # The path to the ingestsender command.

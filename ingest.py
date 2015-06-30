@@ -4,6 +4,7 @@ import logging, logging.config, mailinglogger
 import csv
 import yaml
 import requests
+import re
 
 from datetime import datetime, timedelta
 from time import sleep
@@ -14,7 +15,7 @@ from qpid import messaging as qm
 from config import (
     SERVER, SLEEP_TIMER,
     MAX_FILE_AGE, START_DATE, END_DATE, QUICK_LOOK_QUANTITY,
-    UFRAME, EDEX, EMAIL)
+    UFRAME, EDEX, EMAIL, INGEST_CSVS)
 
 import logger
 import email_notifications
@@ -24,28 +25,30 @@ Data Ingestion Script
 Usage: python ingest.py [task] [options]
 
 Tasks:
-          from_csv  Ingest data from a CSV file. 
+          from_csv  Ingest data from a CSV file.
                     Requires a filename argument with a .csv extension.
-    from_csv_batch  Ingest data from multiple CSV files defined in a batch file.  
+    from_csv_batch  Ingest data from multiple CSV files defined in a batch file.
                     Requires a filename argument with a .csv.batch extension.
            from_dir Ingest data from CSVs contained in the specified directory.
                     Requires a path argument.
-             dummy  A dummy task that creates an Ingestor but doesn't try to ingest any data. 
+       single_file  Only ingest a single file.
+             dummy  A dummy task that creates an Ingestor but doesn't try to ingest any data.
                     Used for testing.
 
 Options:
                 -h  Display this help message.
                 -v  Verbose mode. Outputs the script's INFO and ERROR messages to the console while the script runs.
-                -t  Test Mode. 
-                        The script will go through all of the motions of ingesting data, but will not call any ingest 
+                -t  Test Mode.
+                        The script will go through all of the motions of ingesting data, but will not call any ingest
                         sender commands.
-                -c  Commands-only Mode. 
-                        The script will write the ingest sender commands to a file for all files in the queue, but 
+                -c  Commands-only Mode.
+                        The script will write the ingest sender commands to a file for all files in the queue, but
                         will not go through the ingestion process.
-                -f  Force Mode. 
-                        The script will disregard the EDEX log file checks for already ingested data and ingest all 
+                -f  Force Mode.
+                        The script will disregard the EDEX log file checks for already ingested data and ingest all
                         matching files.
          -no-email  Don't send email notifications.
+   --no-check-edex  Don't check to see if edex is alive after every input
          --sleep=n  Override the sleep timer with a value of n seconds.
      --startdate=d  Only ingest files newer than the specified start date d (in the YYYY-MM-DD format).
        --enddate=d  Only ingest files older than the specified end date d (in the YYYY-MM-DD format).
@@ -71,6 +74,7 @@ def set_options(object, attrs, options):
         'quick_look_quantity': None,
         'edex_command': EDEX['command'],
         'no_email': False,
+        'no_check_edex': False,
         'health_check_enabled': EDEX['health_check_enabled'],
         }
     for attr in attrs:
@@ -123,6 +127,7 @@ class Task(object):
         'from_csv',         # Ingest from a single CSV file.
         'from_csv_batch',   # Ingest from multiple CSV files defined in a batch.
         'from_dir',         # Ingest from multiple CSV files in a directory.
+        'single_file',      # Ingest from a single file
         'dummy',            # A dummy task. Doesn't do anything.
         ) 
 
@@ -139,6 +144,7 @@ class Task(object):
         def switch_value(switch, converter):
             value_error_messages = {
                 int: "%s must be set to an integer" % switch,
+                float: "%s must be a float",
                 get_date: "%s must be in YYYY-MM-DD format" % switch,
                 }
             switch = "--%s=" % switch
@@ -154,8 +160,9 @@ class Task(object):
             'test_mode': "-t" in args, 
             'force_mode': "-f" in args,
             'commands_only': '-c' in args, 
-            'no_email': '-no-email' in args, 
-            'sleep_timer': switch_value("sleep", int) or SLEEP_TIMER,
+            'no_email': '-no-email' in args,
+            'no_check_edex': '--no-check-edex' in args,
+            'sleep_timer': switch_value("sleep", float) or SLEEP_TIMER,
             'max_file_age': switch_value("age", int) or MAX_FILE_AGE,
             'start_date': switch_value("startdate", get_date) or get_date(START_DATE),
             'end_date': switch_value("enddate", get_date) or get_date(END_DATE),
@@ -178,6 +185,121 @@ class Task(object):
         for option in sorted(["%s: %s" % (o, self.options[o]) for o in self.options]):
             self.logger.info(option)
         self.mailer.options_summary()
+
+    def single_file(self):
+        # read in command line options
+        self.logger.info("Importing Single File")
+        self.options['force_mode'] = True
+        f_tosend = ''
+        param_search_space = ''
+        params = None
+        if len(self.args) == 1:
+            self.logger.info("Only File Given")
+            f_tosend= self.args[0]
+            #search the default location
+            param_search_space = INGEST_CSVS
+        elif len(self.args) == 3 and self.args[1] == '--params':
+            self.logger.info("Only File and search location given")
+            f_tosend = self.args[0]
+            param_search_space = self.args[2]
+        elif len(self.args) == 5:
+            self.logger.info("All Parameters Defined")
+            f_tosend = self.args[1]
+            # here we are creating a single ingestion file
+            params = [
+                {
+                'uframe_route' : self.args[0],
+                'reference_designator' : self.args[2],
+                'data_source' : self.args[3],
+                },
+            ]
+
+            deployment = self.args[4]
+        else:
+            self.logger.error('Invalid command line arguments: ' + ', '.join(self.args))
+            return
+        if params is None:
+            params = self.parameter_search(f_tosend, param_search_space)
+            deployment = self.get_deployment(f_tosend)
+            self.logger.info("Discovered parameters for file %s" % f_tosend)
+            self.logger.info("Deployment  %s" % deployment)
+            for p in params:
+                lstring = ''
+                for k,v in p.iteritems():
+                    lstring += k + ': ' +  str(v) + ", "
+                self.logger.info(lstring)
+
+        ing = Ingestor(**self.options)
+        files = [[f_tosend, params]]
+        ing.send(files, deployment)
+
+
+    def get_deployment(self, infile):
+        """
+            Get the deployment number from the filename.  Assuming it is a full path to the
+            data file and deployment is one of
+        """
+        deploy_number = infile.split('/')[5][1:]
+        return deploy_number
+
+    def parameter_search(self, infile, param_search_space):
+        """Search for the parameters needed to ingest the passed csv file.  Begin the search for the parameters from
+        the param_search_space.  This can be either a file or a directory.  Must be a csv file. infile is the
+        name of the file we are parsing."""
+        pfile = None
+        # if we are given a csv file we immediatly have the file to read parameters from
+        if os.path.isfile(param_search_space) and os.path.splitext(param_search_space)[1] == '.csv':
+            pfile = param_search_space
+        else:
+            # Do a search from the given location
+            # First search to see if the calibration directory is within the directory we were passed
+            # This can happend if we start searching in the default space. for i in a:
+            split_path = infile.split('/')
+            platform = split_path[4]
+            deployment  = split_path[5]
+
+            # iterate through all directories to find the .csv file with platform and deployment information
+            for directory, _, files in os.walk(param_search_space):
+                for possible_file in files:
+                    # we have the correct deployment a
+                    if os.path.splitext(possible_file)[1] == '.csv':
+                        if platform in possible_file and deployment in possible_file:
+                            pfile = directory + '/' + possible_file
+                            break
+
+                # break out of outer loop if we have found it.
+                if pfile is not None:
+                    break
+        # Read the parameters now that we have the correct file
+        params = []
+        if pfile is None:
+            self.logger.error("Could not find ingest parameters for %s" % infile)
+        else:
+            params = self.read_parameters(infile, pfile)
+        return params
+
+
+    def read_parameters(self, infile, param_file):
+        """Read the parameters from the csv files.
+        In file is used to check and make sure we are reading the correct parameters
+        param_file is a csv file which contains ingestion information for the infile
+        """
+        params = []
+        with open(param_file) as pfile:
+            reader = csv.DictReader(pfile)
+
+            for row in reader:
+                mask = row['filename_mask'].replace('*', '.*')
+                mask = mask.replace('?', '.?')
+                match = re.match(mask, infile)
+                if match is not None:
+                    one_param = {
+                        'uframe_route' : row['uframe_route'],
+                        'reference_designator' : row['reference_designator'],
+                        'data_source' : row['data_source'],
+                        }
+                    params.append(one_param)
+        return params
 
     def from_csv(self):
         ''' Ingest from a single CSV file. '''
@@ -250,8 +372,9 @@ class ServiceManager(object):
 
         self.logger = logging.getLogger('Services')
 
+        if not options['force_mode']:
         # Process all logs.
-        self.edex_log_files = self.process_all_logs()
+            self.edex_log_files = self.process_all_logs()
 
         # Source the EDEX server environment.
         if self.test_mode or EDEX['fake_source']:
@@ -291,7 +414,8 @@ class ServiceManager(object):
                 self.logger.info("TEST MODE: " + command_string)
             else:
                 self.logger.info(command_string)
-                check_output = shell[command]()[1]
+                a = subprocess.check_output(command_string)
+                self.logger.info(a)
         except Exception:
             self.logger.exception("An error occurred when %sing services." % verbose_action)
             log_and_exit(4)
@@ -327,7 +451,7 @@ class ServiceManager(object):
                 status = "edex_ooi: test\npostgres: test\nqpidd: test\npypies: test test \n"
             else:
                 status = shell[self.edex_command]("all", "status")[1]
-        except Exception:
+        except Exception as e:
             self.logger.exception("An error occurred when checking the service statuses.")
             log_and_exit(4)
         else:
@@ -407,6 +531,8 @@ class ServiceManager(object):
                         ) % log_file)
 
         result = shell.zgrep("Finished Processing file", log_file)[1]
+        if not os.path.exists(EDEX['processed_log_path']):
+            os.mkdir(EDEX['processed_log_path'])
         with open(new_log_file, "w") as outfile:
             for row in result:
                 outfile.write(row)
@@ -416,7 +542,7 @@ class ServiceManager(object):
     def process_all_logs(self):
         ''' Processes all EDEX logs in preparation for duplicate ingestion prevention. '''
 
-        # Build a list of all valid EDEX logs
+        # Build a list of all valid EDEX log
         edex_logs  = glob("/".join((EDEX['log_path'], "edex-ooi*.log")))
         edex_logs += glob("/".join((EDEX['log_path'], "edex-ooi*.log.[0-9]*")))
         edex_logs += glob("/".join((EDEX['log_path'], "*.zip")))
@@ -436,7 +562,7 @@ class Ingestor(object):
         set_options(self, (
                 'test_mode', 'force_mode', 'sleep_timer', 
                 'start_date', 'end_date', 'max_file_age', 
-                'quick_look_quantity'), 
+                'quick_look_quantity', 'no_check_edex'),
             options)
         self.queue = []
         self.failed_ingestions = []
@@ -723,9 +849,9 @@ class Ingestor(object):
                 data_source = r['data_source']
 
                 # Check if the EDEX services are still running. If not, attempt to restart them.
-                self.service_manager.wait_until_ready(previous_data_file)
-
-                ingestion_command = ("ingestsender", 
+                if not self.no_check_edex:
+                    self.service_manager.wait_until_ready(previous_data_file)
+                ingestion_command = ("ingestsender",
                     uframe_route, data_file, reference_designator, data_source, deployment_number)
                 try:
                     # Attempt to send the data file over QPID to uFrame.
