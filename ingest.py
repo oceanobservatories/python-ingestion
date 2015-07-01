@@ -335,7 +335,7 @@ class Task(object):
         if not csv_dir:
             self.logger.error("No valid directory specified.")
             return False
-        csv_files = [os.path.abspath(f) for f in os.listdir(csv_dir) if f.endswith(".csv")]
+        csv_files = [csv_dir + '/' + f for f in os.listdir(csv_dir) if f.endswith(".csv")]
         if not csv_files:
             self.logger.error("No CSV files in specified directory.")
 
