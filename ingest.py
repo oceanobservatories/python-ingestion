@@ -29,7 +29,7 @@ Tasks:
                     Requires a filename argument with a .csv extension.
     from_csv_batch  Ingest data from multiple CSV files defined in a batch file.
                     Requires a filename argument with a .csv.batch extension.
-           from_dir Ingest data from CSVs contained in the specified directory.
+          from_dir  Ingest data from CSVs contained in the specified directory.
                     Requires a path argument.
        single_file  Only ingest a single file.
              dummy  A dummy task that creates an Ingestor but doesn't try to ingest any data.
@@ -363,7 +363,6 @@ class Task(object):
         self.mailer.ingestion_completed(log_file_name)
         return True
 
-
 class ServiceManager(object):
     ''' A helper class that manages the services that the ingestion depends on.'''
 
@@ -570,7 +569,7 @@ class Ingestor(object):
 
         ''' Instantiate a ServiceManager for this Ingestor and start the services if any are not 
             running. '''
-        self.service_manager = options.get('service_manager', ServiceManager(**options))
+        self.service_manager = options.get('service_manager', ServiceManager(force_mode=self.force_mode, **options))
         if not self.service_manager.refresh_status():
             self.service_manager.action("start")
 

@@ -11,13 +11,13 @@ END_DATE: null              # The latest date a file can have to be included in 
 INGEST_CSVS: null           # The path to the ingestion-csvs repository which contains ingest parameters.
 
 UFRAME:
-    command: /home/developer/uframes/ooi/bin/ingestsender        # The path to the ingestsender command.
+    command: /home/asadev/uframes/ooi/bin/ingestsender        # The path to the ingestsender command.
     log_path: .                                                  # The path to where the script's ingestion logs will be stored.
     failed_ingestion_path: .                                     # The path to where failed ingestion CSVs will be stored.
 
 EDEX:
-    command: /home/developer/uframes/ooi/bin/edex-server         # The path to the edex-server command.      
-    log_path: /home/developer/uframes/ooi/uframe-1.0/edex/logs/  # The path to the EDEX logs.
+    command: /home/asadev/uframes/ooi/bin/edex-server            # The path to the edex-server command.      
+    log_path: /home/asadev/uframes/ooi/uframe-1.0/edex/logs/     # The path to the EDEX logs.
     processed_log_path: ./processed_edex_logs/                   # The path to where the filtered/reduced EDEX logs will be stored.
     fake_source: False                                           # Set to True to fool the script into thinking that edex-server was sourced.
     cooldown: 60                                                 # The wait time (in seconds) after EDEX services are started by the script.
@@ -25,13 +25,20 @@ EDEX:
     health_check_url: http://127.0.0.1:12576/sensor/inv
     health_check_enable: True
 
-EMAIL: # Used for email notifications of errors. Requires a valid SMTP server to work.
+# Used for email notifications of errors. Requires a valid SMTP server to work.
+EMAIL:
     enabled: False
     sender: ruig@ooi.rutgers.edu
     receivers:
         - ruig@ooi.rutgers.edu
     server: localhost
     port: 1025
+
+# Options for the Ingestion Monitor
+MONITOR:
+    test_mode: False
+    polling_time: 1
+    ingestion_csv_path: /home/asadev/ingestion-csvs
 
 # Required to validate the CSVs in the Github repository. 
 GITHUB_TOKEN: null
