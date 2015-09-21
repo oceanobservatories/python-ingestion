@@ -37,8 +37,10 @@ EMAIL:
 # Options for the Ingestion Monitor
 MONITOR:
     test_mode: False
-    polling_time: 1
+    force_mode: True
     ingestion_csv_path: /home/asadev/ingestion-csvs
+    queue_ingestion_enabled: True
+    queue_ingestion_interval: 30
 
 # Required to validate the CSVs in the Github repository. 
 GITHUB_TOKEN: null

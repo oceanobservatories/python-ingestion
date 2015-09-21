@@ -6,6 +6,7 @@ import yaml
 import requests
 import re
 
+from collections import deque
 from datetime import datetime, timedelta
 from time import sleep
 from glob import glob
@@ -285,7 +286,7 @@ class Task(object):
         param_file is a csv file which contains ingestion information for the infile
         """
         params = []
-        with open(param_file) as pfile:
+        with open(param_file, "U") as pfile:
             reader = csv.DictReader(pfile)
 
             for row in reader:
@@ -322,7 +323,7 @@ class Task(object):
         except IndexError:
             self.logger.error("No CSV batch file specified.")
             return False
-        with open(csv_batch, 'r') as f:
+        with open(csv_batch, 'rU') as f:
             csv_files = [x.strip() for x in f.readlines() if x.strip()]
 
         self.csv_ingestion(csv_files, csv_batch.split("/")[-1].split(".")[0] + "_batch")
@@ -563,13 +564,13 @@ class Ingestor(object):
                 'start_date', 'end_date', 'max_file_age', 
                 'quick_look_quantity', 'no_check_edex'),
             options)
-        self.queue = []
+        self.queue = deque()
         self.failed_ingestions = []
         self.qpid_senders = {}
 
         ''' Instantiate a ServiceManager for this Ingestor and start the services if any are not 
             running. '''
-        self.service_manager = options.get('service_manager', ServiceManager(force_mode=self.force_mode, **options))
+        self.service_manager = options.get('service_manager', ServiceManager(**options))
         if not self.service_manager.refresh_status():
             self.service_manager.action("start")
 
@@ -606,7 +607,7 @@ class Ingestor(object):
             loads the Ingestor object's queue with a batch with those matching parameters.'''
 
         try:
-            reader = csv.DictReader(open(csv_file))
+            reader = csv.DictReader(open(csv_file, "U"))
         except IOError:
             self.logger.error("%s not found." % csv_file)
             return False
@@ -779,7 +780,8 @@ class Ingestor(object):
             commands_file = 'commands_' + today_string + '.log'
         commands_file = "/".join((UFRAME['log_path'], commands_file))
         with open(commands_file, 'w') as outfile:
-            for batch in self.queue:
+            while self.queue:
+                batch = self.queue.popleft()
                 for data_file, routes in batch['files']:
                     for route in routes:
                         ingestion_command = " ".join((
@@ -801,7 +803,8 @@ class Ingestor(object):
 
         self.logger.info('')
         pool = []
-        for batch in self.queue:
+        while self.queue:
+            batch = self.queue.popleft()
             # Wait for any job slots to become available
             while len(pool) == max_jobs:
                 max_jobs, max_jobs_last_updated = self.update_max_jobs(
