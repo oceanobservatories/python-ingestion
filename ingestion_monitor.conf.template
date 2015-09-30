@@ -94,4 +94,4 @@ autostart=false
 autorestart=false
 stderr_logfile=[python-ingestion]/ingestion_monitor_error.log
 stopsignal=TERM
-user=shariq
+user=[user]
