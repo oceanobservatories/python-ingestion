@@ -12,8 +12,6 @@ from ingest import Ingestor, Task
 import logger
 import config
 
-TOTAL_WATCHERS = 0
-
 # ---------------------------------------
 # Setup Logging
 
@@ -117,18 +115,18 @@ class IngestionMonitor:
 
         self.logger.info("Creating observer for %s" % csv_file)
         self.observer = Observer()
-        self.schedules = 0
+        self.watchers = 0
         for mask in self.routes:
-            # Attach a schedule for each file mask in the CSV file to the Observer.
+            # Attach a watcher for each file mask in the CSV file to the Observer.
             mask_path = '/'.join(mask.split('/')[:-1])
             if os.path.isdir(mask_path):
                 event_handler = MaskRouteEventHandler(patterns=[mask], routes=self.routes[mask])
                 self.observer.schedule(event_handler, mask_path, recursive=True)
-                self.schedules += 1 
+                self.watchers += 1 
             else:
                 self.logger.warning("Directory not found: %s" % mask_path)
 
-        if self.schedules == 0:
+        if self.watchers == 0:
              self.logger.warning("No watchers set for this observer: %s" % self.csv_file)
 
     def process_csv(self):
@@ -167,7 +165,7 @@ class IngestionMonitor:
         return {mask: routes[mask] for mask in routes}
 
     def start(self):
-        self.logger.info("Starting monitor for %s" % self.csv_file)
+        self.logger.info("Starting %s watchers for %s" % (self.watchers, self.csv_file))
         self.observer.start()
 
     def stop(self):
@@ -179,14 +177,15 @@ class IngestionMonitor:
 
 # Create IngestionMonitors for all csv files.
 MONITORS = {}
+TOTAL_WATCHERS = 0
 for f in CSV_FILES:
     MONITORS[f] = IngestionMonitor(f)
-    TOTAL_WATCHERS = TOTAL_WATCHERS + MONITORS[f].schedules
+    TOTAL_WATCHERS += MONITORS[f].watchers
 
 main_logger.info("Total watchers for all monitors: %s" % TOTAL_WATCHERS)
 
-# Remove any IngestionMonitors that have no schedules set.
-MONITORS = {k: v for k, v in MONITORS.iteritems() if MONITORS[k].schedules > 0}
+# Remove any IngestionMonitors that have no watchers set.
+MONITORS = {k: v for k, v in MONITORS.iteritems() if MONITORS[k].watchers > 0}
 
 # Start all IngestionMonitors.
 for m in MONITORS:
