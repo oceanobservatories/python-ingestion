@@ -188,10 +188,13 @@ MONITORS = {k: v for k, v in MONITORS.iteritems() if MONITORS[k].schedules > 0}
 # Start all IngestionMonitors.
 for m in MONITORS:
     TOTAL_WATCHERS = TOTAL_WATCHERS + MONITORS[m].schedules
-    main_logger.info(TOTAL_WATCHERS)
-    MONITORS[m].start()
+    try:
+        MONITORS[m].start()
+    except OSError:
+        main_logger.error("inotify instance limit reached, increase OS's max_user_watchers.")
+        sys.exit(1)
 
-main_logger.info("All monitors ready.")
+main_logger.info("All monitors ready. Running %s total watchers." % TOTAL_WATCHERS)
 
 # Set up and start ingestor queue emptying thread.
 def ingest_from_queue(ingestor):
