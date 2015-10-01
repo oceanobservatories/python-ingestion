@@ -181,13 +181,15 @@ class IngestionMonitor:
 MONITORS = {}
 for f in CSV_FILES:
     MONITORS[f] = IngestionMonitor(f)
+    TOTAL_WATCHERS = TOTAL_WATCHERS + MONITORS[m].schedules
+
+main_logger.info("Total watchers for all monitors: %s" % TOTAL_WATCHERS)
 
 # Remove any IngestionMonitors that have no schedules set.
 MONITORS = {k: v for k, v in MONITORS.iteritems() if MONITORS[k].schedules > 0}
 
 # Start all IngestionMonitors.
 for m in MONITORS:
-    TOTAL_WATCHERS = TOTAL_WATCHERS + MONITORS[m].schedules
     try:
         MONITORS[m].start()
     except OSError:
