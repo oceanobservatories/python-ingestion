@@ -12,6 +12,8 @@ from ingest import Ingestor, Task
 import logger
 import config
 
+TOTAL_WATCHERS = 0
+
 # ---------------------------------------
 # Setup Logging
 
@@ -123,6 +125,8 @@ class IngestionMonitor:
                 event_handler = MaskRouteEventHandler(patterns=[mask], routes=self.routes[mask])
                 self.observer.schedule(event_handler, mask_path, recursive=True)
                 self.schedules += 1 
+                TOTAL_WATCHERS += 1
+                self.logger.info(TOTAL_WATCHERS)
             else:
                 self.logger.warning("Directory not found: %s" % mask_path)
 
