@@ -181,7 +181,7 @@ class IngestionMonitor:
 MONITORS = {}
 for f in CSV_FILES:
     MONITORS[f] = IngestionMonitor(f)
-    TOTAL_WATCHERS = TOTAL_WATCHERS + MONITORS[m].schedules
+    TOTAL_WATCHERS = TOTAL_WATCHERS + MONITORS[f].schedules
 
 main_logger.info("Total watchers for all monitors: %s" % TOTAL_WATCHERS)
 
