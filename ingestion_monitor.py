@@ -125,8 +125,6 @@ class IngestionMonitor:
                 event_handler = MaskRouteEventHandler(patterns=[mask], routes=self.routes[mask])
                 self.observer.schedule(event_handler, mask_path, recursive=True)
                 self.schedules += 1 
-                TOTAL_WATCHERS += 1
-                self.logger.info(TOTAL_WATCHERS)
             else:
                 self.logger.warning("Directory not found: %s" % mask_path)
 
@@ -189,6 +187,8 @@ MONITORS = {k: v for k, v in MONITORS.iteritems() if MONITORS[k].schedules > 0}
 
 # Start all IngestionMonitors.
 for m in MONITORS:
+    TOTAL_WATCHERS = TOTAL_WATCHERS + MONITORS[m].schedules
+    main_logger.info(TOTAL_WATCHERS)
     MONITORS[m].start()
 
 main_logger.info("All monitors ready.")
