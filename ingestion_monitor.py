@@ -178,6 +178,7 @@ class IngestionMonitor:
 # Create IngestionMonitors for all csv files.
 MONITORS = {}
 TOTAL_WATCHERS = 0
+TOTAL_RUNNING_WATCHERS = 0
 for f in CSV_FILES:
     MONITORS[f] = IngestionMonitor(f)
     TOTAL_WATCHERS += MONITORS[f].watchers
@@ -191,12 +192,13 @@ MONITORS = {k: v for k, v in MONITORS.iteritems() if MONITORS[k].watchers > 0}
 for m in MONITORS:
     try:
         MONITORS[m].start()
+        TOTAL_RUNNING_WATCHERS += MONITORS[m].watchers
     except OSError:
         main_logger.error(
-            "inotify instance limit reached (created %s watcher(s)), increase OS's max_user_watches." % TOTAL_WATCHERS)
+            "inotify instance limit reached (created %s watcher(s)), increase OS's max_user_watches." % TOTAL_RUNNING_WATCHERS)
         sys.exit(1)
 
-main_logger.info("All monitors ready. Running %s total watchers." % TOTAL_WATCHERS)
+main_logger.info("All monitors ready. Running %s total watchers." % TOTAL_RUNNING_WATCHERS)
 
 # Set up and start ingestor queue emptying thread.
 def ingest_from_queue(ingestor):
