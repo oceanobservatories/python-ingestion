@@ -115,19 +115,21 @@ class IngestionMonitor:
 
         self.logger.info("Creating observer for %s" % csv_file)
         self.observer = Observer()
-        self.watchers = 0
         for mask in self.routes:
             # Attach a watcher for each file mask in the CSV file to the Observer.
             mask_path = '/'.join(mask.split('/')[:-1])
             if os.path.isdir(mask_path):
                 event_handler = MaskRouteEventHandler(patterns=[mask], routes=self.routes[mask])
                 self.observer.schedule(event_handler, mask_path, recursive=True)
-                self.watchers += 1 
             else:
                 self.logger.warning("Directory not found: %s" % mask_path)
 
         if self.watchers == 0:
              self.logger.warning("No watchers set for this observer: %s" % self.csv_file)
+
+    @property
+    def watchers(self):
+        return len(self.observer._watches)
 
     def process_csv(self):
         try:
