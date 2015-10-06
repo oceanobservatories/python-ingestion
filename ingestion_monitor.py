@@ -194,7 +194,7 @@ for m in MONITORS:
         MONITORS[m].start()
         TOTAL_RUNNING_WATCHERS += MONITORS[m].watchers
     except OSError:
-        main_logger.error(
+        main_logger.exception(
             "inotify instance limit reached (created %s watcher(s)), increase OS's max_user_watches." % TOTAL_RUNNING_WATCHERS)
         sys.exit(1)
 
