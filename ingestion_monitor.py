@@ -192,7 +192,8 @@ for m in MONITORS:
     try:
         MONITORS[m].start()
     except OSError:
-        main_logger.error("inotify instance limit reached, increase OS's max_user_watchers.")
+        main_logger.error(
+            "inotify instance limit reached (created %s watcher(s)), increase OS's max_user_watches." % TOTAL_WATCHERS)
         sys.exit(1)
 
 main_logger.info("All monitors ready. Running %s total watchers." % TOTAL_WATCHERS)
