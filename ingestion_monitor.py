@@ -25,7 +25,7 @@ main_logger = logging.getLogger("Main")
 # Constants
 
 CSV_FILES = []
-for root, dirs, files in os.walk(config.MONITOR.get("ingestion_csv_path", ".")):
+for root, dirs, files in os.walk(config.MONITOR.get("ingestion_csv_path", "."), followlinks=True):
     CSV_FILES += ["/".join([root, f]) for f in files if f.endswith(".csv") and "#" not in f]
 
 GLOBAL_INGESTOR = Ingestor(
@@ -211,8 +211,9 @@ def ingest_from_queue(ingestor):
 
 QUEUE_INGESTION_TIMER = RepeatedTimer(
     QUEUE_INGESTION_INTERVAL, QUEUE_INGESTION_ENABLED, ingest_from_queue, GLOBAL_INGESTOR)
-QUEUE_INGESTION_TIMER.logger.info(
-    "Queue ingestion timer started and will run every %s second(s)." % QUEUE_INGESTION_INTERVAL)
+if QUEUE_INGESTION_ENABLED:
+    QUEUE_INGESTION_TIMER.logger.info(
+        "Queue ingestion timer started and will run every %s second(s)." % QUEUE_INGESTION_INTERVAL)
 
 def exit_handler(sig, frame):
     # Stop all IngestionMonitors.
