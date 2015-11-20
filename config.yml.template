@@ -17,7 +17,8 @@ UFRAME:
 
 EDEX:
     command: /home/asadev/uframes/ooi/bin/edex-server            # The path to the edex-server command.      
-    log_path: /home/asadev/uframes/ooi/uframe-1.0/edex/logs/     # The path to the EDEX logs.
+    log_paths:
+        - /home/asadev/uframes/ooi/uframe-1.0/edex/logs/         # The path to the EDEX logs.
     processed_log_path: ./processed_edex_logs/                   # The path to where the filtered/reduced EDEX logs will be stored.
     fake_source: False                                           # Set to True to fool the script into thinking that edex-server was sourced.
     cooldown: 60                                                 # The wait time (in seconds) after EDEX services are started by the script.
