@@ -544,9 +544,9 @@ class ServiceManager(object):
 
         # Build a list of all valid EDEX logs
         for log_path in EDEX['log_paths']:
-            edex_logs  = glob("/".join(log_path, "edex-ooi*.log")))
-            edex_logs += glob("/".join(log_path, "edex-ooi*.log.[0-9]*")))
-            edex_logs += glob("/".join(log_path, "*.zip")))
+            edex_logs  = glob("/".join((log_path, "edex-ooi*.log")))
+            edex_logs += glob("/".join((log_path, "edex-ooi*.log.[0-9]*")))
+            edex_logs += glob("/".join((log_path, "*.zip")))
             edex_logs = sorted([l for l in edex_logs if ".lck" not in l])
 
         self.logger.info("Pre-processing log files for duplicate searching.")
