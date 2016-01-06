@@ -34,4 +34,4 @@ args = parser.parse_args()
 
 qpid_sender = QpidSender(address=args.queue)
 qpid_sender.connect()
-qpidSender.send(args.message, "text/plain", args.sensor, arg.delivery_type, args.deployment_number)
+qpid_sender.send(args.message, "text/plain", args.sensor, arg.delivery_type, args.deployment_number)
