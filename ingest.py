@@ -781,8 +781,7 @@ class Ingestor(object):
             commands_file = 'commands_' + today_string + '.log'
         commands_file = "/".join((UFRAME['log_path'], commands_file))
         with open(commands_file, 'w') as outfile:
-            while self.queue:
-                batch = self.queue.popleft()
+            for batch in list(self.queue):
                 for data_file, routes in batch['files']:
                     for route in routes:
                         ingestion_command = " ".join((
