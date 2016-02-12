@@ -67,7 +67,7 @@ def file_mask_has_files(row):
     ''' Check to see if any files are found that match the file mask. '''
     return bool(len(glob(row["filename_mask"])))
 
-def file_mask_has_deployment_number(row):
+def deployment_number(row):
     ''' Check to see if a deployment number can be parsed from the file mask. '''
     try:
         deployment_number = int([
@@ -77,6 +77,9 @@ def file_mask_has_deployment_number(row):
             ][0][1:])
     except:
         return False
+    return deployment_number
+
+def deployment_number_matches_filename(deployment_number):
     return True
 
 def ingest_queue_matches_data_source(row):
@@ -97,7 +100,12 @@ for f in csv_files:
             if not file_mask_has_files(row):
                 log.warning(
                     "%s: No files found for %s (%s)." % (i + 2, row["filename_mask"], f))
-            if not file_mask_has_deployment_number(row):
+            deployment_number = deployment_number(row)
+            if deployment_number(row):
+                if not deployment_number_matches_filename(deployment_number, f):
+                    log.warning(
+                        "%s: Deployment Number from %s doesn't match filename %s." % (i + 2, row["filename_mask"], f))
+            else:
                 log.warning(
                     "%s: Can't parse Deployment Number from %s (%s)." % (i + 2, row["filename_mask"], f))
             if not ingest_queue_matches_data_source(row):

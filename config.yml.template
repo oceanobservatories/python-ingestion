@@ -26,6 +26,12 @@ EDEX:
     health_check_url: http://127.0.0.1:12576/sensor/inv
     health_check_enabled: True
 
+QPID:
+    host: localhost
+    port: 5672
+    user: guest
+    password: guest
+
 # Used for email notifications of errors. Requires a valid SMTP server to work.
 EMAIL:
     enabled: False

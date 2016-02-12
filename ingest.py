@@ -16,7 +16,8 @@ from qpid import messaging as qm
 from config import (
     SERVER, SLEEP_TIMER,
     MAX_FILE_AGE, START_DATE, END_DATE, QUICK_LOOK_QUANTITY,
-    UFRAME, EDEX, EMAIL, INGEST_CSVS)
+    UFRAME, EDEX, EMAIL, INGEST_CSVS,
+    QPID)
 
 import logger
 import email_notifications
@@ -593,7 +594,7 @@ class Ingestor(object):
         ''' Connect or retrieve an already connected QPID sender for a specific route.'''
         qpid_sender = self.qpid_senders.get(route, None)
         if not qpid_sender:
-            qpid_sender = QpidSender(address=route)
+            qpid_sender = QpidSender(address=route, **QPID)
             qpid_sender.connect()
             self.qpid_senders[route] = qpid_sender
         return qpid_sender
@@ -606,6 +607,18 @@ class Ingestor(object):
     def load_queue_from_csv(self, csv_file):
         ''' Reads the specified CSV file for mask, route, designator, and source parameters and 
             loads the Ingestor object's queue with a batch with those matching parameters.'''
+
+        # Grab the deployment number from the file name.
+        try:
+            deployment_number = str(int([
+                n for n in csv_file.split("_") 
+                if len(n)==6 and n[0] in ('D', 'R', 'X')
+                ][0][1:]))
+        except:
+            self.logger.info('')
+            self.logger.error(
+                "Can't get deployment number from %s. Will attempt to get deployment numbers from file masks." % csv_file)
+            deployment_number = None
 
         try:
             reader = csv.DictReader(open(csv_file, "U"))
@@ -642,27 +655,28 @@ class Ingestor(object):
         for mask in routes:
             self.load_queue(mask, routes[mask])
 
-    def load_queue(self, mask, routes):
+    def load_queue(self, mask, routes, deployment_number):
         ''' Finds the files that match the filename_mask parameter and loads them into the 
             Ingestor object's queue. '''
 
         # Get a list of files that match the file mask and log the list size.
         data_files = sorted(glob(mask))
 
-        # Grab the deployment number.
-        # The filename mask structure might change pending decision from the MIOs.
-        try:
-            deployment_number = str(int([
-                n for n in mask.split("/") 
-                if len(n)==6 and n[0] in ('D', 'R', 'X')
-                ][0][1:]))
-        except:
-            self.logger.info('')
-            self.logger.error(
-                "Can't get deployment number from %s." % mask)
-            for p in routes:
-                self.failed_ingestions.append(dict(filename_mask=mask, **p))
-            return False
+        if not deployment_number:
+            # Grab the deployment number from the file name mask if no deployment number is specified.
+            # The filename mask structure might change pending decision from the MIOs.
+            try:
+                deployment_number = str(int([
+                    n for n in mask.split("/") 
+                    if len(n)==6 and n[0] in ('D', 'R', 'X')
+                    ][0][1:]))
+            except:
+                self.logger.info('')
+                self.logger.error(
+                    "Can't get deployment number from %s." % mask)
+                for p in routes:
+                    self.failed_ingestions.append(dict(filename_mask=mask, **p))
+                return False
 
         self.logger.info('')
         self.logger.info(
