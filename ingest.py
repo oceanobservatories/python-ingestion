@@ -653,7 +653,7 @@ class Ingestor(object):
                     routes[mask] = [parameters]
 
         for mask in routes:
-            self.load_queue(mask, routes[mask])
+            self.load_queue(mask, routes[mask], deployment_number)
 
     def load_queue(self, mask, routes, deployment_number):
         ''' Finds the files that match the filename_mask parameter and loads them into the 
