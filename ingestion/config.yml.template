@@ -32,15 +32,6 @@ QPID:
     user: guest
     password: guest
 
-# Used for email notifications of errors. Requires a valid SMTP server to work.
-EMAIL:
-    enabled: False
-    sender: ruig@ooi.rutgers.edu
-    receivers:
-        - ruig@ooi.rutgers.edu
-    server: localhost
-    port: 1025
-
 # Options for the Ingestion Monitor
 MONITOR:
     test_mode: False
