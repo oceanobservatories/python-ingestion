@@ -1,2 +1,3 @@
 *.pyc
-config.yml
+ingestion/config.yml
+ingestion/jobs.yml

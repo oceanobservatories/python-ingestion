@@ -1,6 +1,6 @@
 import logging, logging.config, mailinglogger
 from datetime import datetime
-from config import UFRAME, EMAIL, SERVER
+from config import UFRAME
 
 DEFAULTS = {
     'version': 1,
@@ -8,9 +8,6 @@ DEFAULTS = {
     'formatters': {
         'simple': {
             'format': '%(levelname)-7s | %(asctime)s | %(name)-8s | %(message)s',
-            },
-        'email': {
-            'format': '%(asctime)s - %(name)s: %(message)s'
             },
         'raw': {
             'format': '%(message)s',
@@ -34,18 +31,6 @@ DEFAULTS = {
             'formatter': 'raw',
             'stream': 'ext://sys.stdout',
             },
-        'errors_to_email': {
-            'class': 'mailinglogger.SummarisingLogger',
-            'level': 'ERROR',
-            'mailhost': (EMAIL['server'], EMAIL['port']),
-            'fromaddr': EMAIL['sender'],
-            'toaddrs': EMAIL['receivers'],
-            'subject': '[OOI-RUIG] Auto-Notification: Ingestion Error(s) (%s)' % SERVER,
-            'template': ('This is an automatically generated notification. '
-                'The following errors occurred while running the ingestion script:\n\n%s'),
-            'send_empty_entries': False,
-            'formatter': 'email',
-            },
         },
     'loggers': {
         '': {
@@ -56,14 +41,12 @@ DEFAULTS = {
         },
     }
 
-def setup_logging(log_file_name=None, send_mail=True, info_to_console=False):
+def setup_logging(log_file=None, verbose=False):
     logging_config = DEFAULTS
-    log_file_name = log_file_name or datetime.today().strftime('ingestion_%Y_%m_%d.log')
-    if send_mail:
-        logging_config['loggers']['']['handlers'] += ['errors_to_email']
-    if info_to_console:
+    log_file = log_file or datetime.today().strftime('ingestion_%Y_%m_%d.log')
+    if verbose:
         logging_config['loggers']['']['handlers'].append('info_to_console')
-    if log_file_name:
+    if log_file:
         logging_config['handlers']['file_handler']['filename'] = "/".join((
-            UFRAME['log_path'], log_file_name))
+            UFRAME['log_path'], log_file))
     logging.config.dictConfig(logging_config)

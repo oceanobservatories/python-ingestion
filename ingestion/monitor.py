@@ -8,9 +8,9 @@ from threading import Timer
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler, PatternMatchingEventHandler
 
-from ingest import Ingestor, Task
-import logger
+from ingestion import Ingestor
 import config
+import logger
 
 # ---------------------------------------
 # Setup Logging
@@ -30,7 +30,11 @@ for root, dirs, files in os.walk(config.MONITOR.get("ingestion_csv_path", "."), 
 
 GLOBAL_INGESTOR = Ingestor(
     test_mode=config.MONITOR.get("test_mode", False), 
-    force_mode=config.MONITOR.get("force_mode", True),
+    force_mode=config.MONITOR.get("force_mode", False),
+    qpid_host=config.QPID.get('host', 'localhost'),
+    qpid_port=config.QPID.get('user', 5672),
+    qpid_user=config.QPID.get('user', 'guest'),
+    qpid_password=config.QPID.get('password', 'guest'),
     )
 
 QUEUE_INGESTION_ENABLED = config.MONITOR.get('queue_ingestion_enabled', False)

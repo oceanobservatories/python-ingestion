@@ -1,956 +1,185 @@
 #!/usr/bin/env python
-import sys, os, subprocess, multiprocessing
-import logging, logging.config, mailinglogger
-import csv
-import yaml
-import requests
-import re
 
-from collections import deque
-from datetime import datetime, timedelta
-from time import sleep
+import os, argparse
 from glob import glob
-from whelk import shell, pipe
-from qpid import messaging as qm
+from datetime import datetime
 
-from config import (
-    SERVER, SLEEP_TIMER,
-    MAX_FILE_AGE, START_DATE, END_DATE, QUICK_LOOK_QUANTITY,
-    UFRAME, EDEX, EMAIL, INGEST_CSVS,
-    QPID)
+import logging
 
-import logger
-import email_notifications
+from ingestion import Ingestor, log_and_exit
 
-INTERNAL_DOCUMENTATION = '''
-Data Ingestion Script
-Usage: python ingest.py [task] [options]
+import ingestion.config as config
+import ingestion.logger as logger
 
-Tasks:
-          from_csv  Ingest data from a CSV file.
-                    Requires a filename argument with a .csv extension.
-    from_csv_batch  Ingest data from multiple CSV files defined in a batch file.
-                    Requires a filename argument with a .csv.batch extension.
-          from_dir  Ingest data from CSVs contained in the specified directory.
-                    Requires a path argument.
-       single_file  Only ingest a single file.
-             dummy  A dummy task that creates an Ingestor but doesn't try to ingest any data.
-                    Used for testing.
+parser = argparse.ArgumentParser(description="Ingest data to UFrame.")
+subparsers = parser.add_subparsers(dest="task")
 
-Options:
-                -h  Display this help message.
-                -v  Verbose mode. Outputs the script's INFO and ERROR messages to the console while the script runs.
-                -t  Test Mode.
-                        The script will go through all of the motions of ingesting data, but will not call any ingest
-                        sender commands.
-                -c  Commands-only Mode.
-                        The script will write the ingest sender commands to a file for all files in the queue, but
-                        will not go through the ingestion process.
-                -f  Force Mode.
-                        The script will disregard the EDEX log file checks for already ingested data and ingest all
-                        matching files.
-         -no-email  Don't send email notifications.
-   --no-check-edex  Don't check to see if edex is alive after every input
-         --sleep=n  Override the sleep timer with a value of n seconds.
-     --startdate=d  Only ingest files newer than the specified start date d (in the YYYY-MM-DD format).
-       --enddate=d  Only ingest files older than the specified end date d (in the YYYY-MM-DD format).
-           --age=n  Override the maximum age of the files to be ingested in n seconds.
-      --cooldown=n  Override the EDEX service startup cooldown timer with a value of n seconds.
-         --quick=n  Override the number of files per filemask to ingest. Used for quick look ingestions.
+# From CSV (from_csv)
+parser_from_csv = subparsers.add_parser('from_csv', 
+    help="Ingest using parameters in a CSV file.")
+parser_from_csv.add_argument('files', nargs='*', 
+    help="Path to CSV file.")
 
-Error Codes:
-                 4  There is a problem with the EDEX server.
-                 5  An integer value was not specified for any of the override options.
+# From File (from_file)
+parser_single_file = subparsers.add_parser('from_file', 
+    help="Ingest a single file.")
+parser_single_file.add_argument('files', nargs='*',
+    help="Path to data file.")
+parser_single_file.add_argument('uframe_route', 
+    help="UFrame route.")
+parser_single_file.add_argument('reference_designator', 
+    help="Reference Designator.")
+parser_single_file.add_argument('data_source', 
+    help="Data source (i.e. telemetered, recovered, etc.).")
+parser_single_file.add_argument('deployment_number', 
+    help="Deployment number.")
 
-'''
+# Dummy (dummy)
+parser_dummy = subparsers.add_parser('dummy', 
+    help="Create ingestor but don't ingest any data.")
 
-def set_options(object, attrs, options):
-    defaults = {
-        'test_mode': False,
-        'force_mode': False,
-        'sleep_timer': SLEEP_TIMER,
-        'start_date': None,
-        'end_date': None,
-        'max_file_age': MAX_FILE_AGE,
-        'cooldown': EDEX['cooldown'],
-        'quick_look_quantity': None,
-        'edex_command': EDEX['command'],
-        'no_email': False,
-        'no_check_edex': False,
-        'health_check_enabled': EDEX['health_check_enabled'],
-        }
-    for attr in attrs:
-        setattr(object, attr, options.get(attr, defaults[attr]))
-
-def log_and_exit(error_code):
-    exit_logger = logging.getLogger('Exit')
-    if error_code != 0:
-        exit_logger.error("Script exited with error code %s." % error_code)
-    exit_logger.info("-")
-    sys.exit(error_code)
-
-class QpidSender:
-    ''' A helper class for sending ingest messages to ooi uframe with qpid.'''
-    def __init__(self, address, host="localhost", port=5672, user="guest", password="guest"):
-        self.host = host
-        self.port = port
-        self.user = user
-        self.password = password
-        self.address = address
-
-    def connect(self):
-        self.connection = qm.Connection(
-            host=self.host,
-            port=self.port,
-            username=self.user,
-            password=self.password
-            )
-        self.connection.open()
-        self.session = self.connection.session()
-        self.sender = self.session.sender(self.address)
-
-    def send(self, message, content_type, sensor, delivery_type, deployment_number):
-        self.sender.send(
-            qm.Message(content=message, content_type=content_type, user_id=self.user, 
-                properties={
-                    "sensor": sensor,
-                    "deliveryType": delivery_type,
-                    "deploymentNumber": deployment_number,
-                    }))
-
-    def disconnect(self):
-        self.connection.close()
+# Optional Arguments
+parser.add_argument('-v', '--verbose', action='store_true',
+    help="Verbose mode. Logging messages will output to console.")
+parser.add_argument('-t', '--test', action='store_true',
+    help="Test mode. No ingestions will be sent to UFrame.")
+parser.add_argument('-f', '--force', action='store_true',
+    help="Force mode. EDEX logs will not be checked for previous ingestions of the specified data.")
+parser.add_argument('-no-edex', action='store_true',
+    help="Don't check to see if EDEX is alive after every send.")
+parser.add_argument('--sleep_timer', type=int, default=config.SLEEP_TIMER, metavar="N",
+    help="Override the sleep timer with a value of N seconds.")
+parser.add_argument('--start', default=config.START_DATE, metavar="YYYY-MM-DD",
+    help="Only ingest files newer than the specified date in the YYYY-MM-DD format.")
+parser.add_argument('--end', default=config.END_DATE, metavar="YYYY-MM-DD",
+    help="Only ingest files older than the specified date in the YYYY-MM-DD format.")
+parser.add_argument('--age', type=int, default=config.MAX_FILE_AGE, metavar="N",
+    help="Only ingest files that are N seconds old or less.")
+parser.add_argument('--cooldown', type=int, default=config.EDEX['cooldown'], metavar="N",
+    help="Wait N seconds after EDEX services are started before ingesting.")
+parser.add_argument('--quick', type=int, default=config.QUICK_LOOK_QUANTITY, metavar="N",
+    help="Ingest a maximum of N files per CSV.")
+parser.add_argument('--qpid_host', type=str, default=config.QPID['host'], metavar="host",
+    help="The QPID server hostname.")
+parser.add_argument('--qpid_port', type=str, default=config.QPID['host'], metavar="port",
+    help="The QPID server port.")
+parser.add_argument('--qpid_user', type=str, default=config.QPID['user'], metavar="username",
+    help="The QPID server username.")
+parser.add_argument('--qpid_password', type=str, default=config.QPID['password'], metavar="password",
+    help="The QPID server password.")
 
 class Task(object):
     ''' A helper class designed to manage the different types of ingestion tasks.'''
 
-    # A list of methods on the Task class that are valid ingestion tasks.
-    valid_tasks = (
-        'from_csv',         # Ingest from a single CSV file.
-        'from_csv_batch',   # Ingest from multiple CSV files defined in a batch.
-        'from_dir',         # Ingest from multiple CSV files in a directory.
-        'single_file',      # Ingest from a single file
-        'dummy',            # A dummy task. Doesn't do anything.
-        ) 
-
     def __init__(self, args):
-        ''' Parse and interpret common command-line options.'''
-
         self.logger = logging.getLogger('Task')
 
-        def get_date(date_string):
+        def parse_date(date_string):
             if date_string:
-                return datetime.strptime(date_string, "%Y-%m-%d")
+                try:
+                    return datetime.strptime(date_string, "%Y-%m-%d")
+                except ValueError:
+                    self.logger.error("Date must be in YYYY-MM-DD format")
+                    log_and_exit(5)
             return None
 
-        def switch_value(switch, converter):
-            value_error_messages = {
-                int: "%s must be set to an integer" % switch,
-                float: "%s must be a float",
-                get_date: "%s must be in YYYY-MM-DD format" % switch,
-                }
-            switch = "--%s=" % switch
-            try:
-                return converter([a for a in args if a[:len(switch)] == switch][0].split("=")[1])
-            except IndexError:
-                return None
-            except ValueError:
-                self.logger.error(value_error_messages[converter])
-                log_and_exit(5)
+        self.args = args
 
         self.options = {
-            'test_mode': "-t" in args, 
-            'force_mode': "-f" in args,
-            'commands_only': '-c' in args, 
-            'no_email': '-no-email' in args,
-            'no_check_edex': '--no-check-edex' in args,
-            'sleep_timer': switch_value("sleep", float) or SLEEP_TIMER,
-            'max_file_age': switch_value("age", int) or MAX_FILE_AGE,
-            'start_date': switch_value("startdate", get_date) or get_date(START_DATE),
-            'end_date': switch_value("enddate", get_date) or get_date(END_DATE),
-            'cooldown': switch_value("cooldown", int) or EDEX['cooldown'],
-            'quick_look_quantity': switch_value("quick", int) or QUICK_LOOK_QUANTITY,
-            'edex_command': EDEX['command'],
-            'health_check_enabled': EDEX['health_check_enabled'],
+            'test_mode': self.args.test, 
+            'force_mode': self.args.force,
+            'no_edex': self.args.no_edex,
+            'sleep_timer': self.args.sleep_timer,
+            'max_file_age': self.args.age,
+            'start_date': parse_date(self.args.start),
+            'end_date': parse_date(self.args.end),
+            'cooldown': self.args.cooldown,
+            'quick_look_quantity': self.args.quick,
+            'edex_command': config.EDEX['command'],
+            'health_check_enabled': config.EDEX['health_check_enabled'],
+            'qpid_host': self.args.qpid_host,
+            'qpid_port': self.args.qpid_port,
+            'qpid_user': self.args.qpid_user,
+            'qpid_password': self.args.qpid_password,
             }
-        self.args = args
-    
-        # Create a Mailer for non-logging based email notifications.
-        self.mailer = email_notifications.Mailer(self.options)
+
+    def execute(self):
+        getattr(self, self.args.task)()
 
     def dummy(self):
         ''' The dummy task is used for testing basic initialization functions. It creates an 
             Ingestor (which in turn creates a ServiceManager) and outputs all of the script's 
-            options to the log and sends an email notification with the same information. '''
+            options to the log. '''
         ingestor = Ingestor(**self.options)
         self.logger.info("Dummy task was run with the following options:")
         for option in sorted(["%s: %s" % (o, self.options[o]) for o in self.options]):
             self.logger.info(option)
-        self.mailer.options_summary()
-
-    def single_file(self):
-        # read in command line options
-        self.logger.info("Importing Single File")
-        self.options['force_mode'] = True
-        f_tosend = ''
-        param_search_space = ''
-        params = None
-        if len(self.args) == 1:
-            self.logger.info("Only File Given")
-            f_tosend= self.args[0]
-            #search the default location
-            param_search_space = INGEST_CSVS
-        elif len(self.args) == 3 and self.args[1] == '--params':
-            self.logger.info("Only File and search location given")
-            f_tosend = self.args[0]
-            param_search_space = self.args[2]
-        elif len(self.args) == 5:
-            self.logger.info("All Parameters Defined")
-            f_tosend = self.args[1]
-            # here we are creating a single ingestion file
-            params = [
-                {
-                'uframe_route' : self.args[0],
-                'reference_designator' : self.args[2],
-                'data_source' : self.args[3],
-                },
-            ]
-
-            deployment = self.args[4]
-        else:
-            self.logger.error('Invalid command line arguments: ' + ', '.join(self.args))
-            return
-        if params is None:
-            params = self.parameter_search(f_tosend, param_search_space)
-            deployment = self.get_deployment(f_tosend)
-            self.logger.info("Discovered parameters for file %s" % f_tosend)
-            self.logger.info("Deployment  %s" % deployment)
-            for p in params:
-                lstring = ''
-                for k,v in p.iteritems():
-                    lstring += k + ': ' +  str(v) + ", "
-                self.logger.info(lstring)
-
-        ing = Ingestor(**self.options)
-        files = [[f_tosend, params]]
-        ing.send(files, deployment)
-
-
-    def get_deployment(self, infile):
-        """
-            Get the deployment number from the filename.  Assuming it is a full path to the
-            data file and deployment is one of
-        """
-        deploy_number = infile.split('/')[5][1:]
-        return deploy_number
-
-    def parameter_search(self, infile, param_search_space):
-        """Search for the parameters needed to ingest the passed csv file.  Begin the search for the parameters from
-        the param_search_space.  This can be either a file or a directory.  Must be a csv file. infile is the
-        name of the file we are parsing."""
-        pfile = None
-        # if we are given a csv file we immediatly have the file to read parameters from
-        if os.path.isfile(param_search_space) and os.path.splitext(param_search_space)[1] == '.csv':
-            pfile = param_search_space
-        else:
-            # Do a search from the given location
-            # First search to see if the calibration directory is within the directory we were passed
-            # This can happend if we start searching in the default space. for i in a:
-            split_path = infile.split('/')
-            platform = split_path[4]
-            deployment  = split_path[5]
-
-            # iterate through all directories to find the .csv file with platform and deployment information
-            for directory, _, files in os.walk(param_search_space):
-                for possible_file in files:
-                    # we have the correct deployment a
-                    if os.path.splitext(possible_file)[1] == '.csv':
-                        if platform in possible_file and deployment in possible_file:
-                            pfile = directory + '/' + possible_file
-                            break
-
-                # break out of outer loop if we have found it.
-                if pfile is not None:
-                    break
-        # Read the parameters now that we have the correct file
-        params = []
-        if pfile is None:
-            self.logger.error("Could not find ingest parameters for %s" % infile)
-        else:
-            params = self.read_parameters(infile, pfile)
-        return params
-
-
-    def read_parameters(self, infile, param_file):
-        """Read the parameters from the csv files.
-        In file is used to check and make sure we are reading the correct parameters
-        param_file is a csv file which contains ingestion information for the infile
-        """
-        params = []
-        with open(param_file, "U") as pfile:
-            reader = csv.DictReader(pfile)
-
-            for row in reader:
-                mask = row['filename_mask'].replace('*', '.*')
-                mask = mask.replace('?', '.?')
-                match = re.match(mask, infile)
-                if match is not None:
-                    one_param = {
-                        'uframe_route' : row['uframe_route'],
-                        'reference_designator' : row['reference_designator'],
-                        'data_source' : row['data_source'],
-                        }
-                    params.append(one_param)
-        return params
 
     def from_csv(self):
-        ''' Ingest from a single CSV file. '''
-
-        # Check to see if a valid CSV has been specified.
-        try:
-            csv_file = [f for f in self.args if f[-4:].lower()==".csv"][0]
-        except IndexError:
-            self.logger.error("No mapping CSV specified.")
-            return False
-
-        self.csv_ingestion([csv_file], csv_file.split("/")[-1].split(".")[0])
-
-    def from_csv_batch(self):
-        ''' Ingest from multiple CSV files, defined in a single .csv.batch file.'''
-
-        # Open the batch list file and parse the CSV paths into a list.
-        try:
-            csv_batch = [f for f in self.args if f[-10:].lower()==".csv.batch"][0]
-        except IndexError:
-            self.logger.error("No CSV batch file specified.")
-            return False
-        with open(csv_batch, 'rU') as f:
-            csv_files = [x.strip() for x in f.readlines() if x.strip()]
-
-        self.csv_ingestion(csv_files, csv_batch.split("/")[-1].split(".")[0] + "_batch")
-
-    def from_dir(self):
-        ''' Ingest from multiple CSV files, located in a directory.'''
-        
-        # Get the directory from the args and load the CSV files into a list.
-        csv_dir = ([d for d in self.args if os.path.isdir(d)][0:] or [None])[0]
-        if not csv_dir:
-            self.logger.error("No valid directory specified.")
-            return False
-        csv_files = [csv_dir + '/' + f for f in os.listdir(csv_dir) if f.endswith(".csv")]
+        ''' Ingest from specified CSV files.'''
+        timestamp_logname = "from_csv_" + datetime.today().strftime('%Y_%m_%d_%H_%M_%S')
+        csv_files = [f for f in self.args.files if f.endswith('.csv')]
         if not csv_files:
-            self.logger.error("No CSV files in specified directory.")
+            self.logger.error("No CSV files found.")
+            return False
 
-        self.csv_ingestion(csv_files, 
-            (csv_dir == "." and "local" or csv_dir.split("/")[-1]) + "_dir")
-
-
-    def csv_ingestion(self, csv_files, log_file_name):
         # Create an instance of the Ingestor class with common options set.
         ingestor = Ingestor(**self.options)
 
         # Ingest from each CSV file.
         for csv_file in csv_files:
             ingestor.load_queue_from_csv(csv_file)
-        ingestor.write_queue_to_file(log_file_name)
-        if not self.options['commands_only']:
-            ingestor.ingest_from_queue()
+        ingestor.ingest_from_queue()
 
         # Write out any failed ingestions from the entire batch to a new CSV file.
         if ingestor.failed_ingestions:
-            ingestor.write_failures_to_csv(log_file_name)
+            ingestor.write_failures_to_csv(timestamp_logname)
 
         self.logger.info('')
         self.logger.info("Ingestion completed.")
-        self.mailer.ingestion_completed(log_file_name)
         return True
 
-class ServiceManager(object):
-    ''' A helper class that manages the services that the ingestion depends on.'''
+    def from_file(self):
+        timestamp_logname = "from_file_" + datetime.today().strftime('%Y_%m_%d_%H_%M_%S')
 
-    def __init__(self, **options):
-        set_options(self, ('test_mode', 'edex_command', 'cooldown', 'health_check_enabled', ), options)
+        ingestor = Ingestor(**self.options)
 
-        self.logger = logging.getLogger('Services')
+        for f in self.args.files:
+            ingestor.load_queue(
+                mask=f,
+                routes={
+                    'uframe_route': self.uframe_route,
+                    'reference_designator': self.reference_designator,
+                    'data_source': self.data_source, },
+                deployment_number=self.deployment_number)
+        ingestor.ingest_from_queue()
 
-        if not options['force_mode']:
-        # Process all logs.
-            self.edex_log_files = self.process_all_logs()
-
-        # Source the EDEX server environment.
-        if self.test_mode or EDEX['fake_source']:
-            self.logger.info("TEST MODE: Sourcing the EDEX server environment.")
-            self.logger.info("TEST MODE: EDEX server environment sourced.")
-            return
-
-        # Source the EDEX environment.
-        try:
-            self.logger.info("Sourcing the EDEX server environment.")
-            # Adapted from http://pythonwise.blogspot.fr/2010/04/sourcing-shell-script.html
-            proc = subprocess.Popen(
-                ". %s; env -0" % self.edex_command, stdout=subprocess.PIPE, shell=True)
-            output = proc.communicate()[0]
-            env = dict((line.split("=", 1) for line in output.split('\x00') if line))
-            os.environ.update(env)
-        except Exception:
-            self.logger.exception("An error occurred when sourcing the EDEX server environment.")
-            log_and_exit(4)
-        else:
-            self.logger.info("EDEX server environment sourced.")
-
-    def action(self, action):
-        ''' Starts or stops all services. '''
-        
-        # Check if the action is valid.
-        if action not in ("start", "stop"):
-            self.logger.error("% is not a valid action" % action.title())
-            log_and_exit(4)
-        verbose_action = {'start': 'start', 'stop': 'stopp'}[action]
-
-        self.logger.info("%sing all services." % verbose_action.title())
-        command = [self.edex_command, "all", action]
-        command_string = " ".join(command)
-        try:
-            if self.test_mode:
-                self.logger.info("TEST MODE: " + command_string)
-            else:
-                self.logger.info(command_string)
-                a = subprocess.check_output(command_string)
-                self.logger.info(a)
-        except Exception:
-            self.logger.exception("An error occurred when %sing services." % verbose_action)
-            log_and_exit(4)
-        else:
-            ''' When EDEX is started, it takes some time for the service to be ready. A cooldown 
-                setting from the config file specifies how long to wait before continuing the 
-                script.'''
-            if action == "start":
-                self.logger.info("Waiting specified cooldown time (%s seconds)" % self.cooldown)
-                sleep(self.cooldown)
-
-            # Check to see if all processes were started or stopped, and exit if there's an issue.
-            self.logger.info("Checking service statuses and refreshing process IDs.")
-            if self.refresh_status() == {'start': True, 'stop': False}[action]:
-                self.logger.info("All services %sed." % verbose_action)
-            else:
-                self.logger.error("There was an issue %sing the services." % verbose_action)
-                self.logger.error(self.process_ids)
-                log_and_exit(4)
-
-    def restart(self):
-        ''' Restart all services.'''
-        self.action("stop")
-        self.action("start")
-
-    def refresh_status(self):
-        ''' Run the edex-server script's status command to get and store process IDs for all 
-            services, as well as determine the actual PID for the EDEX application.
-            Returns True if all services have PIDs, and False if any one service doesn't. '''
-        self.process_ids = {}
-        try:
-            if self.test_mode:
-                status = "edex_ooi: test\npostgres: test\nqpidd: test\npypies: test test \n"
-            else:
-                status = shell[self.edex_command]("all", "status")[1]
-        except Exception as e:
-            self.logger.exception("An error occurred when checking the service statuses.")
-            log_and_exit(4)
-        else:
-            # Parse and process the output of 'edex-server all status' into a dict.
-            status = [s.strip() for s in status.split('\n') if s.strip()]
-            for s in status:
-                name, value = s.split(":")
-                value = value.strip().split(" ")
-                if len(value) == 1:
-                    value = value[0]
-                self.process_ids[name] = value
-
-            ''' Determine the child processes for edex_ooi to get the actual PID of the EDEX 
-                application. '''
-            def child_process(parent_name):
-                return shell.pgrep("-P", self.process_ids[parent_name])[1].split('\n')[0]
-            if self.test_mode:
-                self.process_ids['edex_wrapper'], self.process_ids['edex_server'] = "test", "test"
-            else:
-                self.process_ids['edex_wrapper'] = child_process("edex_ooi")
-                if self.process_ids['edex_wrapper']:
-                    self.process_ids['edex_server'] = child_process("edex_wrapper")
-                else:
-                    self.process_ids['edex_server'] = None
-        return all(self.process_ids.itervalues())
-
-    def wait_until_ready(self, previous_data_file):
-        ''' Sits in a loop until all services are up and running. '''
-        crashed = False
-        while True:
-            if self.refresh_status():
-                if crashed:
-                    self.logger.error((
-                        "One or more EDEX services crashed after ingesting the previous data file (%s)."
-                        "The services were restarted successfully and ingestion will continue."
-                        ) % previous_data_file)
-                break
-            self.logger.warn(
-                ("One or more EDEX services crashed after ingesting the previous data file (%s)."
-                    ) % previous_data_file)
-            crashed = True
-            if EDEX['auto_restart']:
-                self.logger.warn("Attempting to restart the services.")
-                self.restart()
-            else:
-                self.logger.warn("Waiting for external processes to restart the services.")
-        while self.health_check_enabled:
-            if requests.get(EDEX['health_check_url']).status_code == 200:
-                break
-            self.logger.warn("uFrame Health Check failed, pausing ingestion.")
-            while True:
-                if requests.get(EDEX['health_check_url']).status_code == 200:
-                    break
+        self.logger.info('')
+        self.logger.info("Ingestion completed.")
         return True
 
-    def process_log(self, log_file):
-        ''' Processes an EDEX log and creates a new log file with only the relevant, 
-            searchable data. '''
+args = parser.parse_args()
 
-        new_log_file = "/".join((EDEX['processed_log_path'], log_file.split("/")[-1] + ".p"))
-
-        # Check to see if the processed log file already exists.
-        if os.path.isfile(new_log_file):
-            log_file_timestamp = datetime.fromtimestamp(
-                os.path.getmtime(log_file))
-            new_log_file_timestamp = datetime.fromtimestamp(
-                os.path.getmtime(new_log_file))
-            ''' Check to see if the original log file has been modified since being previously 
-                processed. '''
-            if log_file_timestamp < new_log_file_timestamp:
-                self.logger.info(
-                    "%s has already been processed." % log_file)
-                return
-            else:
-                self.logger.info(
-                    ("%s has already been processed, but has been modified and will be re-processed."
-                        ) % log_file)
-
-        result = shell.zgrep("Finished Processing file", log_file)[1]
-        if not os.path.exists(EDEX['processed_log_path']):
-            os.mkdir(EDEX['processed_log_path'])
-        with open(new_log_file, "w") as outfile:
-            for row in result:
-                outfile.write(row)
-        self.logger.info(
-            "%s has been processed and written to %s." % (log_file, new_log_file))
-
-    def process_all_logs(self):
-        ''' Processes all EDEX logs in preparation for duplicate ingestion prevention. '''
-
-        # Build a list of all valid EDEX logs
-        for log_path in EDEX['log_paths']:
-            edex_logs  = glob("/".join((log_path, "edex-ooi*.log")))
-            edex_logs += glob("/".join((log_path, "edex-ooi*.log.[0-9]*")))
-            edex_logs += glob("/".join((log_path, "*.zip")))
-            edex_logs = sorted([l for l in edex_logs if ".lck" not in l])
-
-        self.logger.info("Pre-processing log files for duplicate searching.")
-        for log_file in edex_logs:
-            self.process_log(log_file)
-        return glob("/".join((EDEX['processed_log_path'], "*.p")))
-
-class Ingestor(object):
-    ''' A helper class designed to handle the ingestion process.'''
-
-    def __init__(self, **options):
-        self.logger = logging.getLogger('Ingestor')
-
-        set_options(self, (
-                'test_mode', 'force_mode', 'sleep_timer', 
-                'start_date', 'end_date', 'max_file_age', 
-                'quick_look_quantity', 'no_check_edex'),
-            options)
-        self.queue = deque()
-        self.failed_ingestions = []
-        self.qpid_senders = {}
-
-        ''' Instantiate a ServiceManager for this Ingestor and start the services if any are not 
-            running. '''
-        self.service_manager = options.get('service_manager', ServiceManager(**options))
-        if not self.service_manager.refresh_status():
-            self.service_manager.action("start")
-
-    @staticmethod
-    def update_max_jobs(max_jobs, previous_timestamp):
-        try:
-            jobs_config_file = "jobs.yml"
-            if os.path.isfile(jobs_config_file):
-                last_updated = datetime.fromtimestamp(os.path.getmtime(jobs_config_file))
-                if last_updated == previous_timestamp:
-                    return max_jobs, last_updated
-                else:
-                    return yaml.load(open(jobs_config_file))['MAX_CONCURRENT_JOBS'], last_updated
-        except:
-            pass
-        return 1, previous_timestamp
-
-    def get_qpid_sender(self, route):
-        ''' Connect or retrieve an already connected QPID sender for a specific route.'''
-        qpid_sender = self.qpid_senders.get(route, None)
-        if not qpid_sender:
-            qpid_sender = QpidSender(address=route, **QPID)
-            qpid_sender.connect()
-            self.qpid_senders[route] = qpid_sender
-        return qpid_sender
-
-    def close_qpid_connections(self):
-        ''' Close all connected QPID senders. '''
-        for route in self.qpid_senders:
-            self.qpid_senders[route].disconnect()
-
-    def load_queue_from_csv(self, csv_file):
-        ''' Reads the specified CSV file for mask, route, designator, and source parameters and 
-            loads the Ingestor object's queue with a batch with those matching parameters.'''
-
-        # Grab the deployment number from the file name.
-        try:
-            deployment_number = str(int([
-                n for n in csv_file.split("_") 
-                if len(n)==6 and n[0] in ('D', 'R', 'X')
-                ][0][1:]))
-        except:
-            self.logger.info('')
-            self.logger.error(
-                "Can't get deployment number from %s. Will attempt to get deployment numbers from file masks." % csv_file)
-            deployment_number = None
-
-        try:
-            reader = csv.DictReader(open(csv_file, "U"))
-        except IOError:
-            self.logger.error("%s not found." % csv_file)
-            return False
-        fieldnames = ['uframe_route', 'filename_mask', 'reference_designator', 'data_source']
-        if not set(fieldnames).issubset(reader.fieldnames):
-            self.logger.error((
-                "%s does not have valid column headers. "
-                "The following columns are required: %s") % (csv_file, ", ".join(fieldnames)))
-            return False
-
-        def commented(row):
-            ''' Check to see if the row is commented out. Any field that starts with # indictes a 
-                comment.'''
-            return bool([v for v in row.itervalues() if v and v.startswith("#")])
-
-        routes = {}
-
-        # Load the queue with parameters from each row.
-        for row in reader:
-            if not commented(row):
-                mask = row['filename_mask']
-                parameters = {
-                    f: row[f] for f in row 
-                    if f in ('uframe_route', 'reference_designator', 'data_source')
-                    }
-                if mask in routes.keys():
-                    routes[mask].append(parameters)
-                else:
-                    routes[mask] = [parameters]
-
-        for mask in routes:
-            self.load_queue(mask, routes[mask], deployment_number)
-
-    def load_queue(self, mask, routes, deployment_number):
-        ''' Finds the files that match the filename_mask parameter and loads them into the 
-            Ingestor object's queue. '''
-
-        # Get a list of files that match the file mask and log the list size.
-        data_files = sorted(glob(mask))
-
-        if not deployment_number:
-            # Grab the deployment number from the file name mask if no deployment number is specified.
-            # The filename mask structure might change pending decision from the MIOs.
-            try:
-                deployment_number = str(int([
-                    n for n in mask.split("/") 
-                    if len(n)==6 and n[0] in ('D', 'R', 'X')
-                    ][0][1:]))
-            except:
-                self.logger.info('')
-                self.logger.error(
-                    "Can't get deployment number from %s." % mask)
-                for p in routes:
-                    self.failed_ingestions.append(dict(filename_mask=mask, **p))
-                return False
-
-        self.logger.info('')
-        self.logger.info(
-            "%s file(s) found for %s before filtering." % (
-                len(data_files), mask))
-
-        # If a start date is set, only ingest files modified after that start date.
-        if self.start_date:
-            self.logger.info("Start date set to %s, filtering file list." % (
-                self.start_date))
-            data_files = [
-                f for f in data_files
-                if datetime.fromtimestamp(os.path.getmtime(f)) > self.start_date]
-
-        # If a end date is set, only ingest files modified before that end date.
-        if self.end_date:
-            self.logger.info("End date set to %s, filtering file list." % (
-                self.end_date))
-            data_files = [
-                f for f in data_files
-                if datetime.fromtimestamp(os.path.getmtime(f)) < self.end_date]
-
-        # If a maximum file age is set, only ingest files that fall within that age.
-        if self.max_file_age:
-            self.logger.info(
-                "Maximum file age set to %s seconds, filtering file list." % (self.max_file_age))
-            current_time = datetime.now()
-            age = timedelta(seconds=self.max_file_age)
-            data_files = [
-                f for f in data_files
-                if current_time - datetime.fromtimestamp(os.path.getmtime(f)) < age]
-
-        ''' Check if the data_file has previously been ingested. If it has, then skip it, unless 
-            force mode (-f) is active. '''
-        filtered_data_files = []
-        if self.force_mode:
-            # If force mode is active, add all data files to the queue with the respective routes.
-            for data_file in data_files:
-                if self.quick_look_quantity and self.quick_look_quantity == len(filtered_data_files):
-                    self.logger.info(
-                        "%s of %s file(s) from %s set for quick look ingestion." % (
-                            len(filtered_data_files), len(data_files), mask))
-                    break
-                filtered_data_files.append((data_file, routes))
-        else:
-            # Otherwise, check EDEX logs to see if any file matching the mask has been ingested.
-            route_in_logs = {}
-            for p in routes:
-                route_in_logs[p['uframe_route']] = bool(pipe(
-                        pipe.grep(
-                            "%s.*%s" % (p['uframe_route'], mask.replace("*", ".*")), 
-                            *self.service_manager.edex_log_files
-                            ) |
-                        pipe.head("-1")
-                        )[1])
-
-            def in_edex_log(mask, data_file, uframe_route):
-                ''' Check EDEX logs to see if the file has been ingested by EDEX.'''
-                if not route_in_logs[uframe_route]:
-                    return False
-                return bool(pipe(
-                        pipe.grep(
-                            "%s.*%s" % (uframe_route, mask.replace("*", ".*")), 
-                            *self.service_manager.edex_log_files
-                            ) | 
-                        pipe.grep(
-                            "-m1", "%s.*%s" % (uframe_route, data_file)
-                            ) | 
-                        pipe.head("-1")
-                    )[1])
-
-            self.logger.info(
-                "Determining if any files matching %s have already been ingested." % mask)
-            for data_file in data_files:
-                valid_routes = []
-                for p in routes:
-                    uframe_route = p['uframe_route']
-                    if in_edex_log(mask, data_file, uframe_route):
-                        self.logger.warning((
-                            "EDEX logs indicate that %s (%s) has already been ingested. "
-                            "The file will not be reingested.") % (data_file, uframe_route))
-                        continue
-                    valid_routes.append(p)
-                if len(valid_routes) > 0:
-                    filtered_data_files.append((data_file, valid_routes))
-
-                ''' If a quick look quantity is set (either through the config.yml or the 
-                    command-line argument), exit the loop once the quick look quantity is met. '''
-                if self.quick_look_quantity and self.quick_look_quantity == len(filtered_data_files):
-                    self.logger.info(
-                        "%s of %s file(s) from %s set for quick look ingestion." % (
-                            len(filtered_data_files), len(data_files), mask))
-                    break
-            else:
-                self.logger.info(
-                    "%s file(s) from %s set for ingestion." % (len(filtered_data_files), mask))
-
-        # If no files are found, consider the entire filename mask a failure and track it.
-        if len(filtered_data_files) == 0:
-            for p in routes:
-                self.failed_ingestions.append(dict(filename_mask=mask, **p))
-            return False
-
-        self.queue.append({
-            "mask": mask, 
-            "files": filtered_data_files, 
-            'deployment_number': deployment_number
-            })
-
-    def write_queue_to_file(self, command_file=None):
-        ''' Write the ingestion command for each file to be ingested to a log file. '''
-        today_string = datetime.today().strftime('%Y_%m_%d_%H_%M_%S')
-        if command_file:
-            commands_file = "_".join(("commands", command_file, today_string)) + '.log'
-        else:
-            commands_file = 'commands_' + today_string + '.log'
-        commands_file = "/".join((UFRAME['log_path'], commands_file))
-        with open(commands_file, 'w') as outfile:
-            for batch in list(self.queue):
-                for data_file, routes in batch['files']:
-                    for route in routes:
-                        ingestion_command = " ".join((
-                            UFRAME['command'], 
-                            route['uframe_route'], 
-                            data_file, 
-                            route['reference_designator'], 
-                            route['data_source'],
-                            batch['deployment_number'],
-                            )) + "\n"
-                        outfile.write(ingestion_command)
-        self.logger.info('')
-        self.logger.info('Wrote ingestion commands for files in queue to %s.' % commands_file)
-
-    def ingest_from_queue(self):
-        ''' Call the ingestion command for each batch of files in the Ingestor object's queue, 
-            using multiple processes to concurrently send batches. '''
-        max_jobs, max_jobs_last_updated = self.update_max_jobs(1, datetime.now())
-
-        self.logger.info('')
-        pool = []
-        while self.queue:
-            batch = self.queue.popleft()
-            # Wait for any job slots to become available
-            while len(pool) == max_jobs:
-                max_jobs, max_jobs_last_updated = self.update_max_jobs(
-                    max_jobs, max_jobs_last_updated)
-                pool = [j for j in pool if j.is_alive()]
-
-            # Create, track, and start the job.
-            job = multiprocessing.Process(
-                target=self.send, args=(batch['files'], batch['deployment_number']))
-            pool.append(job)
-            job.start()
-            self.logger.info(
-                "Ingesting %s files for %s from the queue in PID %s." % (
-                    len(batch['files']), batch['mask'], job.pid))
-
-        # Wait for all jobs to end completely.
-        while any([job for job in pool if job.is_alive()]):
-            pass
-
-        self.logger.info("All batches completed.")
-
-    def send(self, files, deployment_number):
-        ''' Calls UFrame's ingest sender application with the appropriate command-line arguments 
-            for all files specified in the files list. '''
-
-        # Define some helper methods.
-        def annotate_parameters(filename, route, designator, source):
-            ''' Turn the ingestion parameters into a dictionary with descriptive keys.'''
-            return {
-                'filename_mask': filename, 
-                'uframe_route': route, 
-                'reference_designator': designator, 
-                'data_source': source,
-                }
-
-        sender_process = multiprocessing.current_process()
-
-        # Ingest each file in the file list.
-        previous_data_file = ""
-        for data_file, routes in files:
-            for r in routes:
-                uframe_route = r['uframe_route']
-                reference_designator = r['reference_designator']
-                data_source = r['data_source']
-
-                # Check if the EDEX services are still running. If not, attempt to restart them.
-                if not self.no_check_edex:
-                    self.service_manager.wait_until_ready(previous_data_file)
-                ingestion_command = ("ingestsender",
-                    uframe_route, data_file, reference_designator, data_source, deployment_number)
-                try:
-                    # Attempt to send the data file over QPID to uFrame.
-                    ingestion_command_string = " ".join(ingestion_command)
-                    if self.test_mode:
-                        ingestion_command_string = "TEST MODE: " + ingestion_command_string
-                    else:
-                        self.get_qpid_sender(uframe_route).send(
-                            data_file, "text/plain", 
-                            reference_designator, data_source, deployment_number)
-                except qm.exceptions.MessagingError as e:
-                    # Log any qpid errors
-                    self.logger.error(
-                        "There was a problem with qpid when ingesting %s (Exception %s)." % (
-                            data_file, e))
-                    self.failed_ingestions.append(
-                        annotate_parameters(
-                            data_file, uframe_route, reference_designator, data_source))
-                else:
-                    # If there are no errors, consider the ingest send a success and log it.
-                    self.logger.info(
-                        "PID: %s | %s" % (str(sender_process.pid), ingestion_command_string))
-                previous_data_file = data_file
-            sleep(self.sleep_timer)
-        return True
-
-    def write_failures_to_csv(self, label):
-        ''' Write any failed ingestions out into a CSV file that can be re-ingested later. '''
-
-        date_string = datetime.today().strftime('%Y_%m_%d')
-        fieldnames = [
-            'uframe_route', 
-            'filename_mask', 
-            'reference_designator', 
-            'data_source', 
-            'deployment_number',
-            ]
-        outfile = "%s/failed_ingestions_%s_%s.csv" % (
-            UFRAME["failed_ingestion_path"], label, date_string)
-
-        writer = csv.DictWriter(
-            open(outfile, 'wb'), delimiter=',', fieldnames=fieldnames)
-
-        self.logger.info(
-            "Writing %s failed ingestion(s) out to %s" % (len(self.failed_ingestions), outfile))
-        writer.writerow(dict((fn,fn) for fn in fieldnames))
-        for f in self.failed_ingestions:
-            writer.writerow(f)
+task = Task(args)
 
 if __name__ == '__main__':
-    # Separate the task and arguments.
-    task, args = sys.argv[1], sys.argv[2:]
-
     # Setup Logging
-    log_file_name = "_".join((
-        "ingestion", task, datetime.today().strftime('%Y_%m_%d_%H_%M_%S'),
-        )) + ".log"
-    logger.setup_logging(
-        log_file_name=log_file_name,
-        send_mail="-no-email" not in args and EMAIL['enabled'],
-        info_to_console="-v" in args)
+    log_file = "_".join(
+        ("ingestion", args.task, datetime.today().strftime('%Y_%m_%d_%H_%M_%S'))) + ".log"
+    logger.setup_logging(log_file=log_file, verbose=args.verbose)
     main_logger = logging.getLogger('Main')
     logging.getLogger("requests").setLevel(logging.WARNING)
 
-    # If the -h argument is passed at the command line, display the internal documentation and exit.
-    if "-h" in sys.argv:
-        sys.stdout.write(INTERNAL_DOCUMENTATION)
-        log_and_exit(0)
-
     # Run the task with the arguments.
-    perform = Task(args)
-    if task in Task.valid_tasks:
-        task_start_time = datetime.now()
-        main_logger.info(
-            "Running ingestion task '%s' with command-line arguments '%s'" % (
-                task, " ".join(args)))
-        main_logger.info('')
-        try:
-            getattr(perform, task)()
-        except Exception:
-            main_logger.exception("There was an unexpected error.")
-        
-    else:
-        main_logger.error("%s is not a valid ingestion task." % task)
-    task_duration = datetime.now() - task_start_time
-    main_logger.info("Task completed in %s." % str(task_duration).split('.')[0])
+    task_start_time = datetime.now()
+    args_string = ", ".join(["%s: %s" % (a, vars(args)[a]) for a in vars(args)])
+    main_logger.info(
+        "Running ingestion task '%s' with the following options: '%s'" % (args.task, args_string))
+    main_logger.info('')
+    try:
+        task.execute()
+    except Exception:
+        main_logger.exception("There was an unexpected error.")
+
+    time_elapsed = datetime.now() - task_start_time
+    main_logger.info("Task completed in %s." % str(time_elapsed).split('.')[0])
