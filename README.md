@@ -30,7 +30,7 @@ Command line options override options set in the config.yml file.
 
 ## Usage
 
-**Always activate the virutal environment before using the script.**
+**Always activate the virtual environment before using the script.**
 
 List any optional arguments before specifying the task. For example:
 
