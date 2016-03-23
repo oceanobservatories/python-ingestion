@@ -1,0 +1,31 @@
+uframe_route,filename_mask,reference_designator,data_source,
+#,,CE01ISSM-SBD17-01-MOPAK0000,,No MOPAK telemetered data in this deployment
+Ingest.velpt-ab-dcl_telemetered,/omc_data/whoi/OMC/CE01ISSM/D00001/dcl17/velpt*/*.velpt*.log,CE01ISSM-SBD17-04-VELPTA000,telemetered,
+#,/omc_data/whoi/OMC/CE01ISSM/D00001/dcl17/ucspp/*.ucspp*.log,CE01ISSM-SBD17-05-ACOMM0000,telemetered,ACOMM communications log with the uCSPP. No driver exists to process this data set
+#,,CE01ISSM-SBD17-06-CTDBPC000,,CTDBP with FLORT not installed in the spring/summer
+#,,CE01ISSM-SBD17-06-FLORTD000,,CTDBP with FLORT not installed in the spring/summer
+Ingest.optaa-dj-dcl_telemetered,/omc_data/whoi/OMC/CE01ISSM/D00001/dcl16/optaa*/*.optaa*.log,CE01ISSM-RID16-01-OPTAAD000,telemetered,
+Ingest.flort-dj-dcl_telemetered,/omc_data/whoi/OMC/CE01ISSM/D00001/dcl16/flort/*.flort.log,CE01ISSM-RID16-02-FLORTD000,telemetered,
+Ingest.ctdbp-cdef-dcl-ce_telemetered,/omc_data/whoi/OMC/CE01ISSM/D00001/dcl16/ctdbp1/*.ctdbp*.log,CE01ISSM-RID16-03-CTDBPC000,telemetered,Uses record stream ctdbp_cdef_dcl_ce_instrument
+Ingest.ctdbp-cdef-dcl-ce_telemetered,/omc_data/whoi/OMC/CE01ISSM/D00001/dcl16/ctdbp1/*.ctdbp*.log,CE01ISSM-RID16-03-DOSTAD000,telemetered,The data for the DOSTA is available in */dcl16/ctdbp1.  Uses record stream ctdbp_cdef_dcl_ce_dosta. Commnented out due to issues with parser
+Ingest.velpt-ab-dcl_telemetered,/omc_data/whoi/OMC/CE01ISSM/D00001/dcl16/velpt*/*.velpt*.log,CE01ISSM-RID16-04-VELPTA000,telemetered,
+Ingest.pco2w-abc-dcl_telemetered,/omc_data/whoi/OMC/CE01ISSM/D00001/dcl16/pco2w*/*.pco2w*.log,CE01ISSM-RID16-05-PCO2WB000,telemetered,
+Ingest.phsen-abcdef-dcl_telemetered,/omc_data/whoi/OMC/CE01ISSM/D00001/dcl16/phsen*/*.phsen*.log,CE01ISSM-RID16-06-PHSEND000,telemetered,
+Ingest.nutnr-b-dcl-conc_telemetered,/omc_data/whoi/OMC/CE01ISSM/D00001/dcl16/nutnr/*.nutnr.log,CE01ISSM-RID16-07-NUTNRB000,telemetered,
+Ingest.spkir-abj-dcl_telemetered,/omc_data/whoi/OMC/CE01ISSM/D00001/dcl16/spkir/*.spkir.log,CE01ISSM-RID16-08-SPKIRB000,telemetered,
+Ingest.vel3d-cd-dcl_telemetered,/omc_data/whoi/OMC/CE01ISSM/D00001/dcl35/vel3d/*.vel3d.log,CE01ISSM-MFD35-01-VEL3DD000,telemetered,
+Ingest.presf-abc-dcl_telemetered,/omc_data/whoi/OMC/CE01ISSM/D00001/dcl35/presf/*.presf.log,CE01ISSM-MFD35-02-PRESFA000,telemetered,
+Ingest.adcpt-acfgm-dcl-pd0_telemetered,/omc_data/whoi/OMC/CE01ISSM/D00001/dcl35/adcpt/*.adcpt.log,CE01ISSM-MFD35-04-ADCPTM000,telemetered,
+Ingest.pco2w-abc-dcl_telemetered,/omc_data/whoi/OMC/CE01ISSM/D00001/dcl35/pco2w*/*.pco2w*.log,CE01ISSM-MFD35-05-PCO2WB000,telemetered,
+Ingest.phsen-abcdef-dcl_telemetered,/omc_data/whoi/OMC/CE01ISSM/D00001/dcl35/phsen*/*.phsen*.log,CE01ISSM-MFD35-06-PHSEND000,telemetered,
+Ingest.optaa-dj-dcl_telemetered,/omc_data/whoi/OMC/CE01ISSM/D00001/dcl37/optaa*/*.optaa*.log,CE01ISSM-MFD37-01-OPTAAD000,telemetered,
+Ingest.ctdbp-cdef-dcl-ce_telemetered,/omc_data/whoi/OMC/CE01ISSM/D00001/dcl37/ctdbp2/*.ctdbp*.log,CE01ISSM-MFD37-03-CTDBPC000,telemetered,Uses record stream ctdbp_cdef_dcl_ce_instrument
+Ingest.ctdbp-cdef-dcl-ce_telemetered,/omc_data/whoi/OMC/CE01ISSM/D00001/dcl37/ctdbp2/*.ctdbp*.log,CE01ISSM-MFD37-04-DOSTAD000,telemetered,The data for the DOSTA is available in */dcl37/ctdbp2.  Uses record stream ctdbp_cdef_dcl_ce_dosta.
+#,,CE01ISSM-MFD37-06-CAMDSA000,,"Instrument not deployed, no data available"
+#,,CE01ISSM-MFD37-07-ZPLSCC000,,"Instrument not deployed, no data available"
+Ingest.cg-cpm-eng-cpm_telemetered,/omc_data/whoi/OMC/CE01ISSM/D00001/irid2shore/cpm_status*.txt,CE01ISSM-SBC11-00-CPMENG000,telemetered,
+Ingest.cg-dcl-eng-dcl_telemetered,/omc_data/whoi/OMC/CE01ISSM/D00001/dcl16/syslog/*.syslog.log,CE01ISSM-RID16-00-DCLENG000,telemetered,
+Ingest.cg-dcl-eng-dcl_telemetered,/omc_data/whoi/OMC/CE01ISSM/D00001/dcl17/syslog/*.syslog.log,CE01ISSM-SBD17-00-DCLENG000,telemetered,
+Ingest.cg-cpm-eng-cpm_telemetered,/omc_data/whoi/OMC/CE01ISSM/D00001/cpm3/syslog/cpm_status*.txt,CE01ISSM-MFC31-00-CPMENG000,telemetered,"These files are not telemetered from the mooring, but are instead manufactured on the shore server by taking the most recent cpm_status.txt file and adding a date stamp to it."
+Ingest.cg-dcl-eng-dcl_telemetered,/omc_data/whoi/OMC/CE01ISSM/D00001/dcl35/syslog/*.syslog.log,CE01ISSM-MFD35-00-DCLENG000,telemetered,
+Ingest.cg-dcl-eng-dcl_telemetered,/omc_data/whoi/OMC/CE01ISSM/D00001/dcl37/syslog/*.syslog.log,CE01ISSM-MFD37-00-DCLENG000,telemetered,

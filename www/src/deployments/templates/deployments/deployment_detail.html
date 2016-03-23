@@ -1,0 +1,82 @@
+{% extends "deployments/deployment_base.html" %}
+
+{% block content %}
+<div class="row">
+	<div class="col-md-12">
+		<h1>Deployment Details <small>[{{ object.designator }}]</small></h1>
+		<hr>
+	</div>
+</div>
+<div class="row">
+	<div class="col-md-3">
+		<div class="panel panel-default">
+			<div class="panel-heading">
+				<strong>Details</strong>
+			</div>
+			<div class="panel-body">
+				<table class="table table.condensed">
+					<tr>
+						<th>Platform:</th>
+						<td>{{ object.platform }}</td>
+					</tr>
+					<tr>
+						<th>Number:</th>
+						<td>{{ object.number }}</td>
+					</tr>
+					<tr>
+						<th>Data Source:</th>
+						<td>{{ object.data_source }}</td>
+					</tr>
+				</table>
+			</div>
+		</div>
+	</div>
+	<div class="col-md-9">
+		<div class="panel panel-default">
+			<div class="panel-heading">
+				<strong>Tools & History</strong>
+			</div>
+			<div class="panel-body">
+				<ul>
+					<li><strong>Last Ingestion:</strong> YYYY-MM-DD</li>
+					<li><strong>Next Ingestion:</strong> YYYY-MM-DD</li>
+				</ul>
+			</div>
+		</div>
+	</div>
+</div>
+<div class="row">
+	<div class="col-md-12">
+		<div class="panel panel-default">
+			<div class="panel-heading">
+				<strong>Data Groups</strong>
+			</div>
+			<div class="panel-body">
+				<table class="table table-condensed table-monospace table-detailed">
+					<thead>
+						<tr>
+							<th>File Mask</th>
+							<th>Reference Designator</th>
+							<th>uFrame Route</th>
+							<th>Data Source</th>
+						</tr>
+					</thead>
+					<tbody>
+						{% for data_group in object.data_groups.all %}
+							<tr class="main-row link-row" data-target="#dataGroupDetail_{{ data_group.id }}" data-toggle="collapse" aria-expanded="false" aria-controls="dataGroupDetail_{{ data_group.id }}">
+								<td>{{ data_group.file_mask }}</td>
+								<td>{{ data_group.reference_designator }}</td>
+								<td>{{ data_group.uframe_route }}</td>
+								<td>{{ data_group.data_source }}</td>
+							</tr>
+							<tr class="collapse detail-row" id="dataGroupDetail_{{ data_group.id }}">
+								<td colspan="4">Extra information</td>
+							</tr>
+						{% endfor %}
+					</tbody>
+				</table>
+			</div>
+		</div>
+	</div>
+</div>
+{% endblock %}

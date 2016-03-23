@@ -1,0 +1,38 @@
+uframe_route,filename_mask,reference_designator,data_source,
+Ingest.mopak-o-dcl_recovered,/omc_data/whoi/OMC/CE01ISSM/R00003/cg_data/dcl17/mopak*/*mopak*.log,CE01ISSM-SBD17-01-MOPAK0000,recovered_host,
+Ingest.velpt-ab-dcl_recovered,/omc_data/whoi/OMC/CE01ISSM/R00003/cg_data/dcl17/velpt*/*velpt*.log,CE01ISSM-SBD17-04-VELPTA000,recovered_host,
+Ingest.optaa-dj-dcl_recovered,/omc_data/whoi/OMC/CE01ISSM/R00003/cg_data/dcl16/optaa*/*optaa*.log,CE01ISSM-RID16-01-OPTAAD000,recovered_host,
+Ingest.flort-dj-dcl_recovered,/omc_data/whoi/OMC/CE01ISSM/R00003/cg_data/dcl16/flort*/*flort*.log,CE01ISSM-RID16-02-FLORTD000,recovered_host,
+Ingest.ctdbp-cdef-dcl_recovered,/omc_data/whoi/OMC/CE01ISSM/R00003/cg_data/dcl16/ctdbp*/*ctdbp*.log,CE01ISSM-RID16-03-CTDBPC000,recovered_host,
+Ingest.dosta-abcdjm-ctdbp-dcl_recovered,/omc_data/whoi/OMC/CE01ISSM/R00003/cg_data/dcl16/ctdbp*/*ctdbp*.log,CE01ISSM-RID16-03-DOSTAD000,recovered_host,The data for the DOSTA is available in */dcl16/ctdbp1.
+Ingest.velpt-ab-dcl_recovered,/omc_data/whoi/OMC/CE01ISSM/R00003/cg_data/dcl16/velpt*/*velpt*.log,CE01ISSM-RID16-04-VELPTA000,recovered_host,
+Ingest.pco2w-abc-dcl_recovered,/omc_data/whoi/OMC/CE01ISSM/R00003/cg_data/dcl16/pco2w*/*pco2w*.log,CE01ISSM-RID16-05-PCO2WB000,recovered_host,
+Ingest.phsen-abcdef-dcl_recovered,/omc_data/whoi/OMC/CE01ISSM/R00003/cg_data/dcl16/phsen*/*phsen*.log,CE01ISSM-RID16-06-PHSEND000,recovered_host,
+Ingest.nutnr-bdcl-conc_recovered,/omc_data/whoi/OMC/CE01ISSM/R00003/cg_data/dcl16/nutnr*/*nutnr*.log,CE01ISSM-RID16-07-NUTNRB000,recovered_host,
+Ingest.spkir-abj-dcl_recovered,/omc_data/whoi/OMC/CE01ISSM/R00003/cg_data/dcl16/spkir*/*spkir*.log,CE01ISSM-RID16-08-SPKIRB000,recovered_host,
+Ingest.vel3d-cd-dcl_recovered,/omc_data/whoi/OMC/CE01ISSM/R00003/cg_data/dcl35/vel3d*/*vel3d*.log,CE01ISSM-MFD35-01-VEL3DD000,recovered_host,
+Ingest.presf-abc-dcl_recovered,/omc_data/whoi/OMC/CE01ISSM/R00003/cg_data/dcl35/presf*/*presf*.log,CE01ISSM-MFD35-02-PRESFA000,recovered_host,
+Ingest.adcpt-acfgm-dcl-pd0_recovered,/omc_data/whoi/OMC/CE01ISSM/R00003/cg_data/dcl35/adcpt*/*adcpt*.log,CE01ISSM-MFD35-04-ADCPTM000,recovered_host,
+Ingest.pco2w-abc-dcl_recovered,/omc_data/whoi/OMC/CE01ISSM/R00003/cg_data/dcl35/pco2w*/*pco2w*.log,CE01ISSM-MFD35-05-PCO2WB000,recovered_host,
+Ingest.phsen-abcdef-dcl_recovered,/omc_data/whoi/OMC/CE01ISSM/R00003/cg_data/dcl35/phsen*/*phsen*.log,CE01ISSM-MFD35-06-PHSEND000,recovered_host,
+Ingest.optaa-dj-dcl_recovered,/omc_data/whoi/OMC/CE01ISSM/R00003/cg_data/dcl37/optaa*/*optaa*.log,CE01ISSM-MFD37-01-OPTAAD000,recovered_host,
+Ingest.ctdbp-cdef-dcl_recovered,/omc_data/whoi/OMC/CE01ISSM/R00003/cg_data/dcl37/ctdbp*/*ctdbp*.log,CE01ISSM-MFD37-03-CTDBPC000,recovered_host,
+Ingest.dosta-abcdjm-ctdbp-dcl_recovered,/omc_data/whoi/OMC/CE01ISSM/R00003/cg_data/dcl37/ctdbp*/*ctdbp*.log,CE01ISSM-MFD37-04-DOSTAD000,recovered_host,The data for the DOSTA is available in */dcl37/ctdbp2.
+#,,CE01ISSM-MFD37-06-CAMDSA000,recovered_host,No data
+#,,CE01ISSM-MFD37-07-ZPLSCC000,recovered_host,No data
+#,,,,
+Ingest.cg-cpm-eng-cpm_recovered,/omc_data/whoi/OMC/CE01ISSM/R00003/cg_data/cpm1/irid2shore/cpm_status*.txt,CE01ISSM-SBC11-00-CPMENG000,recovered_host,
+Ingest.cg-dcl-eng-dcl_recovered,/omc_data/whoi/OMC/CE01ISSM/R00003/cg_data/dcl16/syslog*/*syslog*.log,CE01ISSM-RID16-00-DCLENG000,recovered_host,
+Ingest.cg-dcl-eng-dcl_recovered,/omc_data/whoi/OMC/CE01ISSM/R00003/cg_data/dcl17/syslog*/*syslog*.log,CE01ISSM-SBD17-00-DCLENG000,recovered_host,
+Ingest.cg-cpm-eng-cpm_recovered,/omc_data/whoi/OMC/CE01ISSM/R00003/cg_data/cpm3/syslog*/cpm_status*.txt,CE01ISSM-MFC31-00-CPMENG000,recovered_host,Only one file
+Ingest.cg-dcl-eng-dcl_recovered,/omc_data/whoi/OMC/CE01ISSM/R00003/cg_data/dcl35/syslog*/*syslog*.log,CE01ISSM-MFD35-00-DCLENG000,recovered_host,
+Ingest.cg-dcl-eng-dcl_recovered,/omc_data/whoi/OMC/CE01ISSM/R00003/cg_data/dcl37/syslog*/*syslog*.log,CE01ISSM-MFD37-00-DCLENG000,recovered_host,
+#,,,,
+Ingest.ctdbp-cdef_recovered,/omc_data/whoi/OMC/CE01ISSM/R00003/instrmt/dcl16/CTDBP*/ce01issm_ctdbp*.hex,CE01ISSM-RID16-03-CTDBPC000,recovered_inst,
+Ingest.velpt-ab_recovered,/omc_data/whoi/OMC/CE01ISSM/R00003/instrmt/dcl16/VELPT*/ce01issm_velpt*.aqd,CE01ISSM-RID16-04-VELPTA000,recovered_inst,
+Ingest.nutnr-b_recovered,/omc_data/whoi/OMC/CE01ISSM/R00003/instrmt/dcl16/NUTNR*/ce01issm_nutnr*/*DAT,CE01ISSM-RID16-07-NUTNRB000,recovered_inst,
+Ingest.velpt-ab_recovered,/omc_data/whoi/OMC/CE01ISSM/R00003/instrmt/dcl17/VELPT*/ce01issm_velpt*.aqd,CE01ISSM-SBD17-04-VELPTA000,recovered_inst,
+Ingest.adcpt-m_recovered,/omc_data/whoi/OMC/CE01ISSM/R00003/instrmt/dcl35/ADCPT*/ce01issm_adcpt*.000,CE01ISSM-MFD35-04-ADCPTM000,recovered_inst,
+# Ingest.ctdbp-cdef_recovered,/omc_data/whoi/OMC/CE01ISSM/R00003/instrmt/dcl37/CTDBP*/ce01issm_ctdbp*.hex,CE01ISSM-MFD37-03-CTDBPC000,recovered_inst,File doesn’t exist on server
+Ingest.pco2w-abc_recovered,/omc_data/whoi/OMC/CE01ISSM/R00003/instrmt/dcl16/PCO2W*/ce01issm_pco2w*.txt,CE01ISSM-RID16-05-PCO2WB000,recovered_inst,
+Ingest.phsen-abcdef_recovered,/omc_data/whoi/OMC/CE01ISSM/R00003/instrmt/dcl16/PHSEN*/ce01issm_phsen*.txt,CE01ISSM-RID16-06-PHSEND000,recovered_inst,

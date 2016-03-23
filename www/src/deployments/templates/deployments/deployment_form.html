@@ -1,0 +1,15 @@
+{% extends "deployments/deployment_base.html" %}
+{% load crispy_forms_tags %}
+
+{% block content %}
+<div class="row">
+	<div class="col-md-6">
+		<h1>Create a Deployment</h1>
+		<form enctype="multipart/form-data" action="" method="post">
+			{% csrf_token %}
+			{{ form|crispy }}
+			<input type="submit" value="Save" />
+		</form>
+	</div>
+</div>
+{% endblock %}

@@ -1,0 +1,34 @@
+{% extends "deployments/deployment_base.html" %}
+
+{% block scripts %}
+{{ block.super }}
+<script type="text/javascript">
+	$(document).ready(function() {
+		$(".link-row").click(function() {
+			window.document.location = $(this).data("url");
+		});
+	});
+</script>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+	<div class="col-md-12">
+		<h1>Deployments</h1>
+		<table id="deployment-list" class="table table-condensed table-hover">
+			<tr>
+				<th>Platform</th>
+				<th>Number</th>
+				<th>Data Source</th>
+			</tr>
+			{% for deployment in object_list %}
+				<tr class="link-row" data-url="{% url 'deployments:detail' deployment.designator %}">
+					<td>{{ deployment.platform }}</td>
+					<td>{{ deployment.number }}</td>
+					<td>{{ deployment.data_source }}</td>
+				</tr>
+			{% endfor %}
+		</table>
+	</div>
+</div>
+{% endblock %}

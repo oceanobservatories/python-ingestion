@@ -128,7 +128,9 @@ class Task(object):
 
         # Ingest from each CSV file.
         for csv_file in csv_files:
-            ingestor.load_queue_from_csv(csv_file)
+            data_groups = Ingestor.process_csv(csv_file)
+            for mask, routes, deployment_number in data_groups:
+                ingestor.load_queue(mask, routes, deployment_number)
         ingestor.ingest_from_queue()
 
         # Write out any failed ingestions from the entire batch to a new CSV file.

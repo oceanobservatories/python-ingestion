@@ -256,6 +256,7 @@ class ServiceManager(object):
 
 class Ingestor(object):
     ''' A helper class designed to handle the ingestion process.'''
+    logger = logging.getLogger('Ingestor')
 
     def __init__(self, 
             test_mode=False, force_mode=False, sleep=0, 
@@ -318,7 +319,8 @@ class Ingestor(object):
         for route in self.qpid_senders:
             self.qpid_senders[route].disconnect()
 
-    def load_queue_from_csv(self, csv_file):
+    @classmethod
+    def process_csv(cls, csv_file):
         ''' Reads the specified CSV file for mask, route, designator, and source parameters and 
             loads the Ingestor object's queue with a batch with those matching parameters.'''
 
@@ -329,19 +331,19 @@ class Ingestor(object):
                 if len(n)==6 and n[0] in ('D', 'R', 'X')
                 ][0][1:]))
         except:
-            self.logger.info('')
-            self.logger.error(
+            cls.logger.info('')
+            cls.logger.error(
                 "Can't get deployment number from %s. Will attempt to get deployment numbers from file masks." % csv_file)
             deployment_number = None
 
         try:
             reader = csv.DictReader(open(csv_file, "U"))
         except IOError:
-            self.logger.error("%s not found." % csv_file)
+            cls.logger.error("%s not found." % csv_file)
             return False
         fieldnames = ['uframe_route', 'filename_mask', 'reference_designator', 'data_source']
         if not set(fieldnames).issubset(reader.fieldnames):
-            self.logger.error((
+            cls.logger.error((
                 "%s does not have valid column headers. "
                 "The following columns are required: %s") % (csv_file, ", ".join(fieldnames)))
             return False
@@ -366,8 +368,20 @@ class Ingestor(object):
                 else:
                     routes[mask] = [parameters]
 
-        for mask in routes:
-            self.load_queue(mask, routes[mask], deployment_number)
+        return [(mask, routes[mask], deployment_number) for mask in routes]
+
+    def in_edex_log(self, mask, data_file, uframe_route):
+        ''' Check EDEX logs to see if the file has been ingested by EDEX.'''
+        return bool(pipe(
+                pipe.grep(
+                    "%s.*%s" % (uframe_route, mask.replace("*", ".*")), 
+                    *self.service_manager.edex_log_files
+                    ) | 
+                pipe.grep(
+                    "-m1", "%s.*%s" % (uframe_route, data_file)
+                    ) | 
+                pipe.head("-1")
+            )[1])
 
     def load_queue(self, mask, routes, deployment_number):
         ''' Finds the files that match the filename_mask parameter and loads them into the 
@@ -447,32 +461,18 @@ class Ingestor(object):
                         pipe.head("-1")
                         )[1])
 
-            def in_edex_log(mask, data_file, uframe_route):
-                ''' Check EDEX logs to see if the file has been ingested by EDEX.'''
-                if not route_in_logs[uframe_route]:
-                    return False
-                return bool(pipe(
-                        pipe.grep(
-                            "%s.*%s" % (uframe_route, mask.replace("*", ".*")), 
-                            *self.service_manager.edex_log_files
-                            ) | 
-                        pipe.grep(
-                            "-m1", "%s.*%s" % (uframe_route, data_file)
-                            ) | 
-                        pipe.head("-1")
-                    )[1])
-
             self.logger.info(
                 "Determining if any files matching %s have already been ingested." % mask)
             for data_file in data_files:
                 valid_routes = []
                 for p in routes:
                     uframe_route = p['uframe_route']
-                    if in_edex_log(mask, data_file, uframe_route):
-                        self.logger.warning((
-                            "EDEX logs indicate that %s (%s) has already been ingested. "
-                            "The file will not be reingested.") % (data_file, uframe_route))
-                        continue
+                    if route_in_logs[uframe_route]:
+                        if self.in_edex_log(mask, data_file, uframe_route):
+                            self.logger.warning((
+                                "EDEX logs indicate that %s (%s) has already been ingested. "
+                                "The file will not be reingested.") % (data_file, uframe_route))
+                            continue
                     valid_routes.append(p)
                 if len(valid_routes) > 0:
                     filtered_data_files.append((data_file, valid_routes))
