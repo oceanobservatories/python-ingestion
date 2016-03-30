@@ -1,6 +1,6 @@
-import logging, logging.config, mailinglogger
+import logging, logging.config
 from datetime import datetime
-from config import UFRAME
+from config import LOGGING
 
 DEFAULTS = {
     'version': 1,
@@ -48,5 +48,5 @@ def setup_logging(log_file=None, verbose=False):
         logging_config['loggers']['']['handlers'].append('info_to_console')
     if log_file:
         logging_config['handlers']['file_handler']['filename'] = "/".join((
-            UFRAME['log_path'], log_file))
+            LOGGING['ingestion'], log_file))
     logging.config.dictConfig(logging_config)

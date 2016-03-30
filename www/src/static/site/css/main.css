@@ -1,7 +1,7 @@
 @import "//maxcdn.bootstrapcdn.com/font-awesome/4.2.0/css/font-awesome.min.css";
 
 html, body{
-    height:100%;		/* For full height images */
+  height:100%;
 }
 
 .starter-template {
@@ -179,12 +179,16 @@ body>.navbar-transparent {
 }
 
 .table-monospace tbody tr td {
-  font-size: 12px;
+  font-size: 9pt;
   font-family: Monospace;
 }
 
+.table-detailed thead tr th {
+  border-bottom: solid 1px #e7e7e7 !important;
+}
+
 .table-detailed tbody tr.main-row td {
-  border-top: solid 1px #eee !important;
+  border-top: solid 1px #f5f5f5	!important;
 }
 
 .table-detailed tbody tr.detail-row td {
@@ -192,5 +196,10 @@ body>.navbar-transparent {
 }
 
 .link-row {
-	cursor: pointer;
+  cursor: pointer;
+}
+
+.short-viewport {
+  max-height: 9em;
+  overflow: scroll;
 }

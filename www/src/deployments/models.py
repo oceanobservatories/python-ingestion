@@ -1,8 +1,12 @@
 from __future__ import unicode_literals
 
 from django.conf import settings
+from django.core.urlresolvers import reverse
 
 from django.db import models
+from polymorphic.models import PolymorphicModel
+
+
 from ingestion import Ingestor
 
 DATA_SOURCE_TYPE_DEFAULTS = {
@@ -17,14 +21,14 @@ DATA_FILE_STATUS_CHOICES = (
     )
 
 class Platform(models.Model):
-    reference_designator = models.CharField(max_length=100)
+    reference_designator = models.CharField(max_length=100, unique=True)
 
     def __unicode__(self):
         return self.reference_designator
 
 class DataSourceType(models.Model):
     name = models.CharField(max_length=20)
-    abbr = models.CharField(max_length=3,
+    abbr = models.CharField(max_length=3, unique=True,
         verbose_name="Abbreviation")
 
     def __unicode__(self):
@@ -60,6 +64,17 @@ class Deployment(models.Model):
     csv_file = models.FileField(null=True, blank=True, 
         verbose_name="CSV File")
 
+    class Meta:
+        unique_together = ('platform', 'data_source', 'number')
+
+    class AlreadyExists(Exception):
+        def __init__(self, obj):
+            self.message = u"A deployment for %s already exists." % obj.designator
+            self.object = obj
+        
+        def html_link_to_object(self, text):
+            return "<a href='%s'>%s</a>" % (self.object.get_absolute_url(), text)
+
     @classmethod
     def split_designator(cls, designator):
         reference_designator, deployment = designator.split("_")[:2]
@@ -73,9 +88,13 @@ class Deployment(models.Model):
         reference_designator, data_source_abbr, number = cls.split_designator(csv_file._name)
         platform, p_created = Platform.objects.get_or_create(reference_designator=reference_designator)
         data_source, ds_created = DataSourceType.get_or_create_from(abbr=data_source_abbr)
-        return cls.objects.create(
-            platform=platform, data_source=data_source, number=number, csv_file=csv_file)
-
+        try:
+            deployment = cls.objects.get(platform=platform, data_source=data_source, number=number)
+        except cls.DoesNotExist:
+            return cls.objects.create(
+                platform=platform, data_source=data_source, number=number, csv_file=csv_file)
+        raise cls.AlreadyExists(deployment)
+    
     @classmethod
     def get_by_designator(cls, designator):
         reference_designator, data_source_abbr, number = cls.split_designator(designator)
@@ -85,7 +104,7 @@ class Deployment(models.Model):
 
     @property
     def designator(self):
-        return "%s_%s%05d" % (self.platform, self.data_source.abbr, self.number)
+        return u"%s_%s%05d" % (self.platform, self.data_source.abbr, self.number)
 
     def __unicode__(self):
         return self.designator
@@ -115,6 +134,12 @@ class Deployment(models.Model):
             ingestor.load_queue(mask, routes, deployment_number)
         self.ingestor.ingest_from_queue()
 
+    def get_absolute_url(self):
+        return reverse('deployments:detail', kwargs={'slug': self.designator, })
+
+    def log_action(self, user, action):
+        DeploymentAction.objects.create(deployment=self, user=user, action=action)
+
 class DataGroup(models.Model):
     deployment = models.ForeignKey(Deployment, related_name="data_groups")
     file_mask = models.CharField(max_length=255)
@@ -126,3 +151,14 @@ class DataFile(models.Model):
     data_group = models.ForeignKey(DataGroup)
     file_path = models.CharField(max_length=255)
     status = models.CharField(max_length=20, choices=DATA_FILE_STATUS_CHOICES)
+
+class Action(PolymorphicModel):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="actions")
+    action = models.CharField(max_length=255)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    def __unicode__(self):
+        return u"%s: %s" % (self.user, self.action)
+
+class DeploymentAction(Action):
+    deployment = models.ForeignKey(Deployment, related_name="actions")

@@ -12,7 +12,7 @@ from glob import glob
 from whelk import shell, pipe
 from qpid import messaging as qm
 
-from config import UFRAME, EDEX
+from config import LOGGING, EDEX
 
 import logger
 
@@ -596,7 +596,7 @@ class Ingestor(object):
             'deployment_number',
             ]
         outfile = "%s/failed_ingestions_%s_%s.csv" % (
-            UFRAME["failed_ingestion_path"], label, date_string)
+            LOGGING["failed"], label, date_string)
 
         writer = csv.DictWriter(
             open(outfile, 'wb'), delimiter=',', fieldnames=fieldnames)

@@ -14,20 +14,36 @@
 {% block content %}
 <div class="row">
 	<div class="col-md-12">
-		<h1>Deployments</h1>
-		<table id="deployment-list" class="table table-condensed table-hover">
-			<tr>
-				<th>Platform</th>
-				<th>Number</th>
-				<th>Data Source</th>
-			</tr>
-			{% for deployment in object_list %}
-				<tr class="link-row" data-url="{% url 'deployments:detail' deployment.designator %}">
-					<td>{{ deployment.platform }}</td>
-					<td>{{ deployment.number }}</td>
-					<td>{{ deployment.data_source }}</td>
+		<h1>
+			Deployments 
+			{% if request.GET %}
+				<small>
+					[
+					{% if request.GET.platform %}Platform: {{ request.GET.platform }} {% endif %}
+					{% if request.GET.number %} {{ request.GET.number }} {% endif %}
+					{% if request.GET.data_source %} {{ request.GET.data_source }} {% endif %}
+					{% if request.GET.data_source_abbr %} {{ request.GET.data_source_abbr }} {% endif %}
+					]
+				</small>
+			{% endif %}
+		</h1>
+		<table id="deployment-list" class="table table-condensed table-hover table-detailed">
+			<thead>
+				<tr>
+					<th>Platform</th>
+					<th>Number</th>
+					<th>Data Source</th>
 				</tr>
-			{% endfor %}
+			</thead>
+			<tbody>
+				{% for deployment in object_list %}
+					<tr class="main-row link-row" data-url="{% url 'deployments:detail' deployment.designator %}">
+						<td>{{ deployment.platform }}</td>
+						<td>{{ deployment.number }}</td>
+						<td>{{ deployment.data_source }}</td>
+					</tr>
+				{% endfor %}
+			</tbody>
 		</table>
 	</div>
 </div>
