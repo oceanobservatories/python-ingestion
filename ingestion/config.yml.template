@@ -1,8 +1,6 @@
 # Default configuration for the ingestion script. 
 # Copy this file to config.yml and adjust the settings as necessary.
 
-SERVER: null                # The hostname of the server that this script is hosted on.
-
 SLEEP_TIMER: 0              # The amount of time (in seconds) to wait in between ingestion commands.
 MAX_FILE_AGE: null          # The max age of a file (in seconds) to ingest. Use for active deployments and cron jobs.
 QUICK_LOOK_QUANTITY: null   # The max number of files per file mask to ingest. Used for quick look ingestions.
@@ -10,10 +8,9 @@ START_DATE: null            # The earliest date a file can have to be included i
 END_DATE: null              # The latest date a file can have to be included in ingestion (YYYY-MM-DD).
 INGEST_CSVS: null           # The path to the ingestion-csvs repository which contains ingest parameters.
 
-UFRAME:
-    command: /home/asadev/uframes/ooi/bin/ingestsender        # The path to the ingestsender command.
-    log_path: .                                                  # The path to where the script's ingestion logs will be stored.
-    failed_ingestion_path: .                                     # The path to where failed ingestion CSVs will be stored.
+LOGGING:
+    ingestion: .            # The path to where the script's ingestion logs will be stored.
+    failed: .               # The path to where failed ingestion CSVs will be stored.
 
 EDEX:
     command: /home/asadev/uframes/ooi/bin/edex-server            # The path to the edex-server command.      
