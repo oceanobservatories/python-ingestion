@@ -17,7 +17,7 @@
 				<table class="table table.condensed">
 					<tr>
 						<th>Platform:</th>
-						<td>{{ object.platform }}</td>
+						<td><a href="{% url 'deployments:list' %}?platform={{ object.platform }}">{{ object.platform }}</a></td>
 					</tr>
 					<tr>
 						<th>Number:</th>
@@ -25,7 +25,7 @@
 					</tr>
 					<tr>
 						<th>Data Source:</th>
-						<td>{{ object.data_source }}</td>
+						<td><a href="{% url 'deployments:list' %}?data_source={{ object.data_source }}">{{ object.data_source }}</a></td>
 					</tr>
 				</table>
 			</div>
@@ -37,10 +37,34 @@
 				<strong>Tools & History</strong>
 			</div>
 			<div class="panel-body">
-				<ul>
-					<li><strong>Last Ingestion:</strong> YYYY-MM-DD</li>
-					<li><strong>Next Ingestion:</strong> YYYY-MM-DD</li>
-				</ul>
+				<div class="row">
+					<div class="col-md-9 short-viewport">
+						<table class="table table-condensed table-monospace table-detailed">
+							<thead>
+								<tr>
+									<th>Timestamp</th>
+									<th>User</th>
+									<th>Action</th>
+								</tr>
+							</thead>
+							<tbody>
+								{% for action in object.actions.all|dictsortreversed:"timestamp" %}
+								<tr class='main-row'>
+									<td>{{ action.timestamp }}</td>
+									<td>{{ action.user.get_full_name }}</td>
+									<td>{{ action.action }}</td>
+								</tr>
+								{% endfor %}
+							</tbody>
+						</table>
+					</div>
+					<div class="col-md-3">
+						<form enctype="multipart/form-data" action="" method="post">
+							{% csrf_token %}
+							<input type="submit" name="_process_csv" value="Reprocess CSV" class="btn btn-default"/>
+						</form>
+					</div>
+				</div>
 			</div>
 		</div>
 	</div>
@@ -52,7 +76,7 @@
 				<strong>Data Groups</strong>
 			</div>
 			<div class="panel-body">
-				<table class="table table-condensed table-monospace table-detailed">
+				<table class="table table-condensed table-hover table-monospace table-detailed">
 					<thead>
 						<tr>
 							<th>File Mask</th>

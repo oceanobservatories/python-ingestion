@@ -1,3 +1,5 @@
 *.pyc
 ingestion/config.yml
 ingestion/jobs.yml
+.idea
+.python-version
