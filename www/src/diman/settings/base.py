@@ -87,6 +87,7 @@ INSTALLED_APPS = (
     'accounts',
 
     'deployments',
+    'triage',
 )
 
 MIDDLEWARE_CLASSES = (
