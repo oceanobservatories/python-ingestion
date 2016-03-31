@@ -581,7 +581,7 @@ class Ingestor(object):
                     self.logger.info(
                         "PID: %s | %s" % (str(sender_process.pid), ingestion_command_string))
                 previous_data_file = data_file
-            sleep(self.sleep_timer)
+            sleep(self.sleep)
         return True
 
     def write_failures_to_csv(self, label):
