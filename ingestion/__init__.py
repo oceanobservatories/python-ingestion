@@ -595,8 +595,8 @@ class Ingestor(object):
             'data_source', 
             'deployment_number',
             ]
-        outfile = "%s/failed_ingestions_%s_%s.csv" % (
-            LOGGING["failed"], label, date_string)
+        outfile = "%s/failed_ingestions_%s.csv" % (
+            LOGGING["failed"], label)
 
         writer = csv.DictWriter(
             open(outfile, 'wb'), delimiter=',', fieldnames=fieldnames)
