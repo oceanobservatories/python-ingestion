@@ -61,7 +61,7 @@ parser.add_argument('--quick', type=int, default=config.QUICK_LOOK_QUANTITY, met
     help="Ingest a maximum of N files per CSV.")
 parser.add_argument('--qpid_host', type=str, default=config.QPID['host'], metavar="host",
     help="The QPID server hostname.")
-parser.add_argument('--qpid_port', type=str, default=config.QPID['host'], metavar="port",
+parser.add_argument('--qpid_port', type=str, default=config.QPID['port'], metavar="port",
     help="The QPID server port.")
 parser.add_argument('--qpid_user', type=str, default=config.QPID['user'], metavar="username",
     help="The QPID server username.")
