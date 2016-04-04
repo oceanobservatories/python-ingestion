@@ -3,6 +3,8 @@ from django.http import Http404, HttpResponseRedirect
 from django.shortcuts import render
 from django.views import generic 
 
+import django_rq
+
 from deployments.models import Deployment
 from deployments.forms import DeploymentCreateFromCSVForm
 
@@ -34,6 +36,10 @@ class DeploymentDetailView(generic.DetailView):
             self.object.process_csv()
             self.object.log_action(request.user, 
                 "Processed CSV and created %d new data groups." % self.object.data_groups.count())
+        if "_ingest" in request.POST:
+            queue = django_rq.get_queue("default")
+            queue.enqueue(self.object.ingest, request.user)
+            self.object.log_action(request.user, "Ingesting deployment.")
         return HttpResponseRedirect(self.object.get_absolute_url())
 
 class DeploymentCreateView(generic.edit.FormView):

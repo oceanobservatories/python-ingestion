@@ -85,6 +85,7 @@ INSTALLED_APPS = (
     'easy_thumbnails',
 
     'polymorphic',
+    'django_rq',
 
     'profiles',
     'accounts',

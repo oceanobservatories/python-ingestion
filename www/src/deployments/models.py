@@ -6,6 +6,7 @@ from django.core.urlresolvers import reverse
 from django.db import models
 from polymorphic.models import PolymorphicModel
 
+from django.dispatch import receiver
 
 from ingestion import Ingestor
 
@@ -128,11 +129,29 @@ class Deployment(models.Model):
                         deployment=self, file_mask=mask, data_source=data_source_type, **route)[0])
         return data_groups
 
-    def ingest(self):
-        self.ingestor = Ingestor(test_mode=settings.INGESTOR['test_mode'])
-        for mask, routes, deployment_number in self.data_groups:
-            ingestor.load_queue(mask, routes, deployment_number)
-        self.ingestor.ingest_from_queue()
+    def ingest(self, user, overrides={}):
+        options = settings.INGESTOR
+        options.update(overrides)
+        ingestor = Ingestor(**options)
+
+        routes = {}
+        for d in self.data_groups.all():
+            parameters = {
+                'uframe_route': d.uframe_route, 
+                'reference_designator': d.reference_designator, 
+                'data_source': d.data_source.name,
+                }
+            if d.file_mask in routes.keys():
+                routes[d.file_mask].append(parameters)
+            else:
+                routes[d.file_mask] = [parameters]
+        data_groups = [(mask, routes[mask]) for mask in routes]
+
+        for mask, routes in data_groups:
+            ingestor.load_queue(mask, routes, self.number)
+        ingestor.ingest_from_queue()
+
+        self.log_action(user, "Ingestion completed.")
 
     def get_absolute_url(self):
         return reverse('deployments:detail', kwargs={'slug': self.designator, })
@@ -162,3 +181,8 @@ class Action(PolymorphicModel):
 
 class DeploymentAction(Action):
     deployment = models.ForeignKey(Deployment, related_name="actions")
+
+@receiver(models.signals.post_save, sender=DeploymentAction)
+def on_created(instance, created, **kwargs):
+    if created:
+        print instance.user, instance.action

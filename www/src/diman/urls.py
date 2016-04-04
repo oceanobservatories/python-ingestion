@@ -11,10 +11,10 @@ urlpatterns = [
     url(r'^$', views.HomePage.as_view(), name='home'),
     url(r'^deployments/', include(deployments.urls, namespace='deployments')),
     url(r'^users/', include(profiles.urls, namespace='profiles')),
+    url(r'^django-rq/', include('django_rq.urls')),
     url(r'^admin/', include(admin.site.urls)),
     url(r'^', include(accounts.urls, namespace='accounts')),
 ]
-
 
 # User-uploaded files like profile pics need to be served in development
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
