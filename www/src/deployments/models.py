@@ -1,4 +1,5 @@
 from __future__ import unicode_literals
+import traceback
 
 from django.conf import settings
 from django.core.urlresolvers import reverse
@@ -158,6 +159,7 @@ class Deployment(models.Model):
                 ingestor.load_queue(mask, routes, self.number)
             ingestor.ingest_from_queue()
         except:
+            traceback.print_tb()
             result['success'] = False
         return result
 
