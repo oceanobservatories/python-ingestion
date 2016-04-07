@@ -500,7 +500,7 @@ class Ingestor(object):
             'deployment_number': deployment_number
             })
 
-    def ingest_from_queue(self):
+    def ingest_from_queue(self, use_billiard=False):
         ''' Call the ingestion command for each batch of files in the Ingestor object's queue, 
             using multiple processes to concurrently send batches. '''
         max_jobs, max_jobs_last_updated = self.update_max_jobs(1, datetime.now())
@@ -516,8 +516,13 @@ class Ingestor(object):
                 pool = [j for j in pool if j.is_alive()]
 
             # Create, track, and start the job.
-            job = multiprocessing.Process(
-                target=self.send, args=(batch['files'], batch['deployment_number']))
+            if use_billiard:
+                import billiard
+                job = billiard.process.Process(
+                    target=self.send, args=(batch['files'], batch['deployment_number']))
+            else:
+                job = multiprocessing.Process(
+                    target=self.send, args=(batch['files'], batch['deployment_number']))
             pool.append(job)
             job.start()
             self.logger.info(

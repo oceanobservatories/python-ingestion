@@ -157,7 +157,7 @@ class Deployment(models.Model):
         try:
             for mask, routes in data_groups:
                 ingestor.load_queue(mask, routes, self.number)
-            ingestor.ingest_from_queue()
+            ingestor.ingest_from_queue(use_billiard=True)
         except:
             traceback.print_exc(file=sys.stdout)
             result['success'] = False
