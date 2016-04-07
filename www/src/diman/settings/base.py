@@ -85,7 +85,6 @@ INSTALLED_APPS = (
     'easy_thumbnails',
 
     'polymorphic',
-    'django_rq',
 
     'profiles',
     'accounts',
@@ -151,3 +150,11 @@ LOGIN_REDIRECT_URL = reverse_lazy("profiles:show_self")
 LOGIN_URL = reverse_lazy("accounts:login")
 
 THUMBNAIL_EXTENSION = 'png'     # Or any extn for your thumbnails
+
+CELERY_ACCEPT_CONTENT = ['pickle', 'json']
+CELERY_RESULT_BACKEND = 'rpc://'
+CELERY_RESULT_PERSISTENT = False
+
+INGESTOR = {
+    'test_mode': True,
+}

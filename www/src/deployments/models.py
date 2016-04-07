@@ -129,10 +129,16 @@ class Deployment(models.Model):
                         deployment=self, file_mask=mask, data_source=data_source_type, **route)[0])
         return data_groups
 
-    def ingest(self, user, overrides={}):
+    def ingest(self, annotations={}, ingest_options={}):
         options = settings.INGESTOR
-        options.update(overrides)
+        options.update(ingest_options)
         ingestor = Ingestor(**options)
+
+        result = {
+            'deployment': self,
+            'user': annotations.get('user'),
+            'success': True
+            }
 
         routes = {}
         for d in self.data_groups.all():
@@ -147,11 +153,13 @@ class Deployment(models.Model):
                 routes[d.file_mask] = [parameters]
         data_groups = [(mask, routes[mask]) for mask in routes]
 
-        for mask, routes in data_groups:
-            ingestor.load_queue(mask, routes, self.number)
-        ingestor.ingest_from_queue()
-
-        self.log_action(user, "Ingestion completed.")
+        try:
+            for mask, routes in data_groups:
+                ingestor.load_queue(mask, routes, self.number)
+            ingestor.ingest_from_queue()
+        except:
+            result['success'] = False
+        return result
 
     def get_absolute_url(self):
         return reverse('deployments:detail', kwargs={'slug': self.designator, })
@@ -186,3 +194,4 @@ class DeploymentAction(Action):
 def on_created(instance, created, **kwargs):
     if created:
         print instance.user, instance.action
+

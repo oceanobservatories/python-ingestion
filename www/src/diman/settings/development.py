@@ -91,16 +91,3 @@ LOGGING = {
 }
 
 logging.config.dictConfig(LOGGING)
-
-RQ_QUEUES = {
-    'default': {
-        'HOST': 'localhost',
-        'PORT': 6379,
-        'DB': 0,
-        'DEFAULT_TIMEOUT': 43200,
-    },
-}
-
-INGESTOR = {
-    'test_mode': True,
-}
