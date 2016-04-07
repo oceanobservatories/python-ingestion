@@ -551,6 +551,8 @@ class Ingestor(object):
 
         sender_process = multiprocessing.current_process()
 
+        deployment_number = str(deployment_number)
+
         # Ingest each file in the file list.
         previous_data_file = ""
         for data_file, routes in files:
