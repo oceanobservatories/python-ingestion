@@ -62,7 +62,7 @@ class QpidSender:
 class ServiceManager(object):
     ''' A helper class that manages the services that the ingestion depends on.'''
 
-    def __init__(self, test_mode=False, force_mode=False, cooldown=60, health_check_enabled=False, **kwargs):
+    def __init__(self, test_mode=False, force_mode=False, cooldown=60, health_check_enabled=False, edex_command=EDEX['command'], **kwargs):
 
         options = locals().copy()
         options.update(kwargs)
