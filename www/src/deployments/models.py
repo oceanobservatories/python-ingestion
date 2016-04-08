@@ -1,7 +1,6 @@
 from __future__ import unicode_literals
 import sys, traceback
 
-from django.conf import settings
 from django.core.urlresolvers import reverse
 
 from django.db import models
@@ -10,6 +9,9 @@ from polymorphic.models import PolymorphicModel
 from django.dispatch import receiver
 
 from ingestion import Ingestor
+
+from deployments import settings
+
 
 DATA_SOURCE_TYPE_DEFAULTS = {
     'R': 'recovered', 
