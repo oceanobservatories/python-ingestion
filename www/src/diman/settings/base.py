@@ -155,6 +155,5 @@ CELERY_ACCEPT_CONTENT = ['pickle', 'json']
 CELERY_RESULT_BACKEND = 'rpc://'
 CELERY_RESULT_PERSISTENT = False
 
-INGESTOR = {
-    'test_mode': True,
-}
+# Ingestor setting overrides.
+INGESTOR_OPTIONS = {}

@@ -13,34 +13,24 @@ def parse_date(date_string):
     return None
 
 INGESTOR_OPTIONS = {
-    'test_mode': getattr(
-        settings, 'INGESTOR_TEST_MODE', False), 
-    'force_mode': getattr(
-        settings, 'INGESTOR_FORCE_MODE', False),
-    'no_edex': getattr(
-        settings, 'INGESTOR_NO_EDEX', False),
-    'sleep_timer': getattr(
-        settings, 'INGESTOR_SLEEP_TIMER', config.SLEEP_TIMER),
-    'max_file_age': getattr(
-        settings, 'INGESTOR_MAX_FILE_AGE', config.MAX_FILE_AGE),
-    'start_date': parse_date(getattr(
-        settings, 'INGESTOR_START_DATE', config.START_DATE)),
-    'end_date': parse_date(getattr(
-        settings, 'INGESTOR_END_DATE', config.END_DATE)),
-    'cooldown': getattr(
-        settings, 'INGESTOR_EDEX_COOLDOWN', config.EDEX['cooldown']),
-    'quick_look_quantity': getattr(
-        settings, 'INGESTOR_QUICK_LOOK_QUANTITY', config.QUICK_LOOK_QUANTITY),
-    'edex_command': getattr(
-        settings, 'INGESTOR_EDEX_COMMAND', config.EDEX['command']),
-    'health_check_enabled': getattr(
-        settings, 'INGESTOR_EDEX_HEALTH_CHECK_ENABLED', config.EDEX['health_check_enabled']),
-    'qpid_host': getattr(
-        settings, 'INGESTOR_QPID_HOST', config.QPID['host']),
-    'qpid_port': getattr(
-        settings, 'INGESTOR_QPID_PORT', config.QPID['port']),
-    'qpid_user': getattr(
-        settings, 'INGESTOR_QPID_USER', config.QPID['user']),
-    'qpid_password': getattr(
-        settings, 'INGESTOR_QPID_PASSWORD', config.QPID['password']),
+    'test_mode': False, 
+    'force_mode': False,
+    'no_edex': False,
+    'sleep_timer': config.SLEEP_TIMER,
+    'max_file_age': config.MAX_FILE_AGE,
+    'start_date': config.START_DATE,
+    'end_date': config.END_DATE,
+    'cooldown': config.EDEX['cooldown'],
+    'quick_look_quantity': config.QUICK_LOOK_QUANTITY,
+    'edex_command': config.EDEX['command'],
+    'health_check_enabled': config.EDEX['health_check_enabled'],
+    'qpid_host': config.QPID['host'],
+    'qpid_port': config.QPID['port'],
+    'qpid_user': config.QPID['user'],
+    'qpid_password': config.QPID['password'],
     }
+
+INGESTOR_OPTIONS.update(settings.INGESTOR_OPTIONS)
+
+INGESTOR_OPTIONS['start_date'] = parse_date(INGESTOR_OPTIONS['start_date'])
+INGESTOR_OPTIONS['end_date'] = parse_date(INGESTOR_OPTIONS['end_date'])
