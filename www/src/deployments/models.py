@@ -1,6 +1,7 @@
 from __future__ import unicode_literals
 import sys, traceback
 
+from django.conf import settings
 from django.core.urlresolvers import reverse
 
 from django.db import models
@@ -10,7 +11,7 @@ from django.dispatch import receiver
 
 from ingestion import Ingestor
 
-from deployments import settings
+from deployments.settings import INGESTOR_OPTIONS
 
 
 DATA_SOURCE_TYPE_DEFAULTS = {
@@ -133,7 +134,7 @@ class Deployment(models.Model):
         return data_groups
 
     def ingest(self, annotations={}, ingest_options={}):
-        options = settings.INGESTOR
+        options = INGESTOR_OPTIONS
         options.update(ingest_options)
         ingestor = Ingestor(**options)
 

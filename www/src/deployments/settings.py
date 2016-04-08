@@ -14,33 +14,33 @@ def parse_date(date_string):
 
 INGESTOR_OPTIONS = {
     'test_mode': getattr(
-        settings, INGESTOR_TEST_MODE, False), 
+        settings, 'INGESTOR_TEST_MODE', False), 
     'force_mode': getattr(
-        settings, INGESTOR_FORCE_MODE, False),
+        settings, 'INGESTOR_FORCE_MODE', False),
     'no_edex': getattr(
-        settings, INGESTOR_NO_EDEX, False),
+        settings, 'INGESTOR_NO_EDEX', False),
     'sleep_timer': getattr(
-        settings, INGESTOR_SLEEP_TIMER, config.SLEEP_TIMER),
+        settings, 'INGESTOR_SLEEP_TIMER', config.SLEEP_TIMER),
     'max_file_age': getattr(
-        settings, INGESTOR_MAX_FILE_AGE, config.MAX_FILE_AGE),
+        settings, 'INGESTOR_MAX_FILE_AGE', config.MAX_FILE_AGE),
     'start_date': parse_date(getattr(
-        settings, INGESTOR_START_DATE, config.START_DATE)),
+        settings, 'INGESTOR_START_DATE', config.START_DATE)),
     'end_date': parse_date(getattr(
-        settings, INGESTOR_END_DATE, config.END_DATE)),
+        settings, 'INGESTOR_END_DATE', config.END_DATE)),
     'cooldown': getattr(
-        settings, INGESTOR_EDEX_COOLDOWN, config.EDEX['cooldown']),
+        settings, 'INGESTOR_EDEX_COOLDOWN', config.EDEX['cooldown']),
     'quick_look_quantity': getattr(
-        settings, INGESTOR_QUICK_LOOK_QUANTITY, config.QUICK_LOOK_QUANTITY),
+        settings, 'INGESTOR_QUICK_LOOK_QUANTITY', config.QUICK_LOOK_QUANTITY),
     'edex_command': getattr(
-        settings, INGESTOR_EDEX_COMMAND, config.EDEX['command']),
+        settings, 'INGESTOR_EDEX_COMMAND', config.EDEX['command']),
     'health_check_enabled': getattr(
-        settings, INGESTOR_EDEX_HEALTH_CHECK_ENABLED, config.EDEX['health_check_enabled']),
+        settings, 'INGESTOR_EDEX_HEALTH_CHECK_ENABLED', config.EDEX['health_check_enabled']),
     'qpid_host': getattr(
-        settings, INGESTOR_QPID_HOST, config.QPID['host']),
+        settings, 'INGESTOR_QPID_HOST', config.QPID['host']),
     'qpid_port': getattr(
-        settings, INGESTOR_QPID_PORT, config.QPID['port']),
+        settings, 'INGESTOR_QPID_PORT', config.QPID['port']),
     'qpid_user': getattr(
-        settings, INGESTOR_QPID_USER, config.QPID['user']),
+        settings, 'INGESTOR_QPID_USER', config.QPID['user']),
     'qpid_password': getattr(
-        settings, INGESTOR_QPID_PASSWORD, config.QPID['password']),
+        settings, 'INGESTOR_QPID_PASSWORD', config.QPID['password']),
     }
