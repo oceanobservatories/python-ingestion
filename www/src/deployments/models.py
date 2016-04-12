@@ -1,4 +1,5 @@
 from __future__ import unicode_literals
+import sys, traceback
 
 from django.conf import settings
 from django.core.urlresolvers import reverse
@@ -6,8 +7,12 @@ from django.core.urlresolvers import reverse
 from django.db import models
 from polymorphic.models import PolymorphicModel
 
+from django.dispatch import receiver
 
 from ingestion import Ingestor
+
+from deployments.settings import INGESTOR_OPTIONS
+
 
 DATA_SOURCE_TYPE_DEFAULTS = {
     'R': 'recovered', 
@@ -128,11 +133,38 @@ class Deployment(models.Model):
                         deployment=self, file_mask=mask, data_source=data_source_type, **route)[0])
         return data_groups
 
-    def ingest(self):
-        self.ingestor = Ingestor(test_mode=settings.INGESTOR['test_mode'])
-        for mask, routes, deployment_number in self.data_groups:
-            ingestor.load_queue(mask, routes, deployment_number)
-        self.ingestor.ingest_from_queue()
+    def ingest(self, annotations={}, ingest_options={}):
+        options = INGESTOR_OPTIONS
+        options.update(ingest_options)
+        ingestor = Ingestor(**options)
+
+        result = {
+            'deployment': self,
+            'user': annotations.get('user'),
+            'success': True
+            }
+
+        routes = {}
+        for d in self.data_groups.all():
+            parameters = {
+                'uframe_route': d.uframe_route, 
+                'reference_designator': d.reference_designator, 
+                'data_source': d.data_source.name,
+                }
+            if d.file_mask in routes.keys():
+                routes[d.file_mask].append(parameters)
+            else:
+                routes[d.file_mask] = [parameters]
+        data_groups = [(mask, routes[mask]) for mask in routes]
+
+        try:
+            for mask, routes in data_groups:
+                ingestor.load_queue(mask, routes, self.number)
+            ingestor.ingest_from_queue(use_billiard=True)
+        except:
+            traceback.print_exc(file=sys.stdout)
+            result['success'] = False
+        return result
 
     def get_absolute_url(self):
         return reverse('deployments:detail', kwargs={'slug': self.designator, })
@@ -162,3 +194,9 @@ class Action(PolymorphicModel):
 
 class DeploymentAction(Action):
     deployment = models.ForeignKey(Deployment, related_name="actions")
+
+@receiver(models.signals.post_save, sender=DeploymentAction)
+def on_created(instance, created, **kwargs):
+    if created:
+        print instance.user, instance.action
+

@@ -1,3 +1,6 @@
 -r base.txt
 django-debug-toolbar>=1.4
 Werkzeug>=0.11.2
+
+# for celery autoreload
+pyinotify>=0.9.6

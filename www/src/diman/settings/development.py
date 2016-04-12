@@ -36,6 +36,9 @@ LOGGING = {
             'format': "[%(asctime)s] %(levelname)s [%(pathname)s:%(lineno)s] %(message)s",
             'datefmt': "%d/%b/%Y %H:%M:%S"
         },
+        'ingest': {
+            'format': '%(levelname)-7s | %(asctime)s | %(name)-8s | %(message)s',
+            },
         'simple': {
             'format': '%(levelname)s %(message)s'
         },
@@ -57,6 +60,11 @@ LOGGING = {
             'level': 'DEBUG',
             'class': 'logging.StreamHandler',
             'formatter': 'simple'
+        },
+        'ingest': {
+            'level': 'DEBUG',
+            'class': 'logging.StreamHandler',
+            'formatter': 'ingest'
         }
     },
     'loggers': {
@@ -71,6 +79,11 @@ LOGGING = {
         },
         'werkzeug': {
             'handlers': ['console'],
+            'level': 'DEBUG',
+            'propagate': True,
+        },
+        'Ingestor': {
+            'handlers': ['ingest'],
             'level': 'DEBUG',
             'propagate': True,
         },

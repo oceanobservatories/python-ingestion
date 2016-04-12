@@ -5,6 +5,7 @@ from django.views import generic
 
 from deployments.models import Deployment
 from deployments.forms import DeploymentCreateFromCSVForm
+from deployments import tasks
 
 class DeploymentListView(generic.ListView):
     model = Deployment
@@ -34,6 +35,9 @@ class DeploymentDetailView(generic.DetailView):
             self.object.process_csv()
             self.object.log_action(request.user, 
                 "Processed CSV and created %d new data groups." % self.object.data_groups.count())
+        if "_ingest" in request.POST:
+            self.object.log_action(request.user, "Ingesting deployment.")
+            tasks.ingest.delay(self.object, annotations={'user': request.user, })
         return HttpResponseRedirect(self.object.get_absolute_url())
 
 class DeploymentCreateView(generic.edit.FormView):

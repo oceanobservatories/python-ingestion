@@ -62,7 +62,7 @@ class QpidSender:
 class ServiceManager(object):
     ''' A helper class that manages the services that the ingestion depends on.'''
 
-    def __init__(self, test_mode=False, force_mode=False, cooldown=60, health_check_enabled=False, **kwargs):
+    def __init__(self, test_mode=False, force_mode=False, cooldown=60, health_check_enabled=False, edex_command=EDEX['command'], **kwargs):
 
         options = locals().copy()
         options.update(kwargs)
@@ -500,7 +500,7 @@ class Ingestor(object):
             'deployment_number': deployment_number
             })
 
-    def ingest_from_queue(self):
+    def ingest_from_queue(self, use_billiard=False):
         ''' Call the ingestion command for each batch of files in the Ingestor object's queue, 
             using multiple processes to concurrently send batches. '''
         max_jobs, max_jobs_last_updated = self.update_max_jobs(1, datetime.now())
@@ -516,8 +516,13 @@ class Ingestor(object):
                 pool = [j for j in pool if j.is_alive()]
 
             # Create, track, and start the job.
-            job = multiprocessing.Process(
-                target=self.send, args=(batch['files'], batch['deployment_number']))
+            if use_billiard:
+                import billiard
+                job = billiard.process.Process(
+                    target=self.send, args=(batch['files'], batch['deployment_number']))
+            else:
+                job = multiprocessing.Process(
+                    target=self.send, args=(batch['files'], batch['deployment_number']))
             pool.append(job)
             job.start()
             self.logger.info(
@@ -545,6 +550,8 @@ class Ingestor(object):
                 }
 
         sender_process = multiprocessing.current_process()
+
+        deployment_number = str(deployment_number)
 
         # Ingest each file in the file list.
         previous_data_file = ""
@@ -581,7 +588,7 @@ class Ingestor(object):
                     self.logger.info(
                         "PID: %s | %s" % (str(sender_process.pid), ingestion_command_string))
                 previous_data_file = data_file
-            sleep(self.sleep_timer)
+            sleep(self.sleep)
         return True
 
     def write_failures_to_csv(self, label):
@@ -595,8 +602,8 @@ class Ingestor(object):
             'data_source', 
             'deployment_number',
             ]
-        outfile = "%s/failed_ingestions_%s_%s.csv" % (
-            LOGGING["failed"], label, date_string)
+        outfile = "%s/failed_ingestions_%s.csv" % (
+            LOGGING["failed"], label)
 
         writer = csv.DictWriter(
             open(outfile, 'wb'), delimiter=',', fieldnames=fieldnames)
