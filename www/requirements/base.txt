@@ -9,3 +9,4 @@ easy-thumbnails>=2.3
 
 # additional baseline packages
 django-polymorphic>=0.9.1
+tailer>=0.4.1
