@@ -8,3 +8,8 @@ class DeploymentAdmin(admin.ModelAdmin):
 @admin.register(models.DataSourceType)
 class DataSourceTypeAdmin(admin.ModelAdmin):
     list_display = ('name', 'abbr')
+
+@admin.register(models.Ingestion)
+class IngestionAdmin(admin.ModelAdmin):
+    list_display = ('index', 'timestamp', 'deployment')
+

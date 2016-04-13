@@ -1,0 +1,15 @@
+{% extends "deployments/deployment_base.html" %}
+
+{% block content %}
+<div class="row">
+	<div class="col-md-12">
+		<h1>Ingestion Details <small>[{{ object.designator }}]</small></h1>
+		<hr>
+	</div>
+</div>
+<div class="row">
+	<div class="col-md-12">
+		{{ object }}
+	</div>
+</div>
+{% endblock %}

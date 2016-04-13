@@ -3,8 +3,8 @@ from django.http import Http404, HttpResponseRedirect
 from django.shortcuts import render
 from django.views import generic 
 
-from deployments.models import Deployment
-from deployments.forms import DeploymentCreateFromCSVForm
+from deployments.models import Deployment, Ingestion
+from deployments.forms import DeploymentCreateFromCSVForm, IngestionForm
 from deployments import tasks
 
 class DeploymentListView(generic.ListView):
@@ -35,9 +35,6 @@ class DeploymentDetailView(generic.DetailView):
             self.object.process_csv()
             self.object.log_action(request.user, 
                 "Processed CSV and created %d new data groups." % self.object.data_groups.count())
-        if "_ingest" in request.POST:
-            self.object.log_action(request.user, "Ingesting deployment.")
-            tasks.ingest.delay(self.object, annotations={'user': request.user, })
         return HttpResponseRedirect(self.object.get_absolute_url())
 
 class DeploymentCreateView(generic.edit.FormView):
@@ -61,3 +58,32 @@ class DeploymentCreateView(generic.edit.FormView):
 
     def get_success_url(self):
         return self.new_deployment.get_absolute_url()
+
+class IngestionCreateView(generic.edit.CreateView):
+    template_name = "deployments/ingestion_form.html"
+    form_class = IngestionForm
+
+    def form_valid(self, form):
+        form.instance.deployment = Deployment.get_by_designator(
+            self.kwargs.pop('deployment_designator', None))
+        return super(IngestionCreateView, self).form_valid(form)
+
+class IngestionDetailView(generic.DetailView):
+    model = Ingestion
+
+    def get_object(self):
+        try:
+            object = Ingestion.objects.get(**{
+                'deployment': Deployment.get_by_designator(self.kwargs.pop('deployment_designator', None)),
+                'index': self.kwargs.pop('index', None),
+                })
+            return object
+        except:
+            raise Http404(u"No ingestion found.")
+
+    def post(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        if "_ingest" in request.POST:
+            self.object.log_action(request.user, "Ingesting deployment.")
+            tasks.ingest.delay(self.object, annotations={'user': request.user, })
+        return HttpResponseRedirect(self.object.get_absolute_url())

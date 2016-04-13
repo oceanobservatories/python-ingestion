@@ -4,8 +4,8 @@
 {% block content %}
 <div class="row">
 	<div class="col-md-6">
-		<h1>Create a Deployment</h1>
-		<p>Create a new deployment from a parameter CSV file.</p>
+		<h1>Import a Deployment</h1>
+		<p>Import a new deployment from a parameter CSV file.</p>
 		<form enctype="multipart/form-data" action="" method="post">
 			{% csrf_token %}
 			{{ form|crispy }}

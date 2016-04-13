@@ -1,5 +1,17 @@
 {% extends "deployments/deployment_base.html" %}
 
+{% block scripts %}
+{{ block.super }}
+<script type="text/javascript">
+	$(document).ready(function() {
+		$(".link-row").click(function() {
+			window.document.location = $(this).data("url");
+		});
+	});
+</script>
+{% endblock %}
+
+
 {% block content %}
 <div class="row">
 	<div class="col-md-12">
@@ -62,6 +74,45 @@
 						<form enctype="multipart/form-data" action="" method="post">
 							{% csrf_token %}
 							<input type="submit" name="_process_csv" value="Reprocess CSV" class="btn btn-default"/>
+						</form>
+					</div>
+				</div>
+			</div>
+		</div>
+		<div class="panel panel-default">
+			<div class="panel-heading">
+				<strong>Ingestions</strong>
+			</div>
+			<div class="panel-body">
+				<div class="row">
+					<div class="col-md-9 short-viewport">
+						<table class="table table-condensed table-monospace table-detailed">
+							<thead>
+								<tr>
+									<th>Index</th>
+									<th>Timestamp</th>
+									<th>Status</th>
+									<th>Active</th>
+								</tr>
+							</thead>
+							<tbody>
+								{% for ingestion in object.ingestions.all|dictsortreversed:"timestamp" %}
+								<tr class='main-row link-row' data-url="{% url 'deployments:ingestion_detail' object.designator ingestion.index %}">
+									<td>{{ ingestion.index }}</td>
+									<td>{{ ingestion.timestamp }}</td>
+									<td>{{ ingestion.status }}</td>
+									<td>{{ ingestion.active|yesno:"Active,Inactive" }}</td>
+								</tr>
+								{% endfor %}
+							</tbody>
+						</table>
+					</div>
+					<div class="col-md-3">
+						<p>
+							<a class="btn btn-default" href="{% url 'deployments:ingestion_create' object.designator %}">Add a new ingestion</a>
+						</p>
+						<form enctype="multipart/form-data" action="" method="post">
+							{% csrf_token %}
 							<input type="submit" name="_ingest" value="Ingest" class="btn btn-default"/>
 						</form>
 					</div>

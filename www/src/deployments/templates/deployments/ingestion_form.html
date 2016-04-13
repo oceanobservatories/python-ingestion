@@ -1,0 +1,12 @@
+{% extends "deployments/deployment_base.html" %}
+{% load crispy_forms_tags %}
+
+{% block content %}
+<div class="row">
+	<div class="col-md-12">
+		<h1>Create a new Ingestion</h1>
+			{% crispy form %}
+		</form>
+	</div>
+</div>
+{% endblock %}

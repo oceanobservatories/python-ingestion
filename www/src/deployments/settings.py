@@ -8,7 +8,6 @@ def parse_date(date_string):
             return datetime.strptime(date_string, "%Y-%m-%d")
         except ValueError:
             msg = "Date must be in YYYY-MM-DD format"
-            self.logger.error(msg)
             raise ValueError(msg)
     return None
 
@@ -29,8 +28,6 @@ INGESTOR_OPTIONS = {
     'qpid_user': config.QPID['user'],
     'qpid_password': config.QPID['password'],
     }
-
 INGESTOR_OPTIONS.update(settings.INGESTOR_OPTIONS)
-
 INGESTOR_OPTIONS['start_date'] = parse_date(INGESTOR_OPTIONS['start_date'])
 INGESTOR_OPTIONS['end_date'] = parse_date(INGESTOR_OPTIONS['end_date'])

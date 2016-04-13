@@ -25,6 +25,11 @@ DATA_FILE_STATUS_CHOICES = (
     in ('pending', 'ingesting', 'ingested')
     )
 
+INGESTION_STATUS_CHOICES = (
+    (c, c) for c
+    in ('pending', 'scheduled', 'running', 'complete')
+    )
+
 class Platform(models.Model):
     reference_designator = models.CharField(max_length=100, unique=True)
 
@@ -184,6 +189,51 @@ class DataFile(models.Model):
     file_path = models.CharField(max_length=255)
     status = models.CharField(max_length=20, choices=DATA_FILE_STATUS_CHOICES)
 
+class Ingestion(models.Model):
+    # Metadata
+    deployment = models.ForeignKey(Deployment, related_name="ingestions")
+    index = models.PositiveIntegerField(null=True, blank=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=20, 
+        choices=INGESTION_STATUS_CHOICES, default="pending")
+    active = models.BooleanField(default=False)
+
+    # Options
+    test_mode = models.BooleanField(default=False,
+        verbose_name="Test Mode")
+    force_mode = models.BooleanField(default=False,
+        verbose_name="Force Mode")
+    no_edex = models.BooleanField(default=False,
+        verbose_name="No EDEX Check")
+    health_check_enabled = models.BooleanField(default=False,
+        verbose_name="Enable Health Check")
+    sleep_timer = models.IntegerField(null=True, blank=True,
+        verbose_name="Sleep Timer")
+    start_date = models.DateField(blank=True, null=True,
+        verbose_name="Start Date")
+    end_date = models.DateField(blank=True, null=True,
+        verbose_name="End Date")
+    cooldown = models.IntegerField(null=True, blank=True,
+        verbose_name="EDEX Services Cooldown Timer")
+    quick_look_quantity = models.IntegerField(null=True, blank=True,
+        verbose_name="Quick Look Ingestion Quantity")
+    edex_command = models.CharField(max_length=255, null=True, blank=True,
+        verbose_name="EDEX Command")
+    qpid_host = models.CharField(max_length=255, null=True, blank=True,
+        verbose_name="QPID Server Host")
+    qpid_port = models.IntegerField(null=True, blank=True,
+        verbose_name="QPID Server Port")
+    qpid_user = models.CharField(max_length=255, null=True, blank=True,
+        verbose_name="QPID Server Username")
+    qpid_password = models.CharField(max_length=255, null=True, blank=True,
+        verbose_name="QPID Server Password")
+
+    def get_absolute_url(self):
+        return self.deployment.get_absolute_url()
+
+    def designator(self):
+        return u"%s-%d" % (self.deployment.designator, self.index)
+
 class Action(PolymorphicModel):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="actions")
     action = models.CharField(max_length=255)
@@ -200,3 +250,8 @@ def on_created(instance, created, **kwargs):
     if created:
         print instance.user, instance.action
 
+@receiver(models.signals.post_save, sender=Ingestion)
+def on_created(instance, created, **kwargs):
+    if created:
+        instance.index = instance.deployment.ingestions.count()
+        instance.save()
