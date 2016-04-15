@@ -9,6 +9,10 @@ class DeploymentAdmin(admin.ModelAdmin):
 class DataSourceTypeAdmin(admin.ModelAdmin):
     list_display = ('name', 'abbr')
 
+@admin.register(models.DataFile)
+class DataFileAdmin(admin.ModelAdmin):
+        list_display = ('file_path', 'status')
+
 @admin.register(models.Ingestion)
 class IngestionAdmin(admin.ModelAdmin):
     list_display = ('index', 'timestamp', 'deployment')

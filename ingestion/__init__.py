@@ -9,6 +9,8 @@ from collections import deque
 from datetime import datetime, timedelta
 from time import sleep
 from glob import glob
+
+import billiard
 from whelk import shell, pipe
 from qpid import messaging as qm
 
@@ -516,13 +518,8 @@ class Ingestor(object):
                 pool = [j for j in pool if j.is_alive()]
 
             # Create, track, and start the job.
-            if use_billiard:
-                import billiard
-                job = billiard.process.Process(
-                    target=self.send, args=(batch['files'], batch['deployment_number']))
-            else:
-                job = multiprocessing.Process(
-                    target=self.send, args=(batch['files'], batch['deployment_number']))
+            job = billiard.process.Process(
+                target=self.send, args=(batch['files'], batch['deployment_number']))
             pool.append(job)
             job.start()
             self.logger.info(
