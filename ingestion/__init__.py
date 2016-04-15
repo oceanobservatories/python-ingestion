@@ -502,33 +502,41 @@ class Ingestor(object):
             'deployment_number': deployment_number
             })
 
-    def ingest_from_queue(self, use_billiard=False):
+    def ingest_from_queue(self, use_billiard=True):
         ''' Call the ingestion command for each batch of files in the Ingestor object's queue, 
             using multiple processes to concurrently send batches. '''
         max_jobs, max_jobs_last_updated = self.update_max_jobs(1, datetime.now())
 
         self.logger.info('')
         pool = []
-        while self.queue:
-            batch = self.queue.popleft()
-            # Wait for any job slots to become available
-            while len(pool) == max_jobs:
-                max_jobs, max_jobs_last_updated = self.update_max_jobs(
-                    max_jobs, max_jobs_last_updated)
-                pool = [j for j in pool if j.is_alive()]
+        if use_billiard:
+            while self.queue:
+                batch = self.queue.popleft()
+                # Wait for any job slots to become available
+                while len(pool) == max_jobs:
+                    max_jobs, max_jobs_last_updated = self.update_max_jobs(
+                        max_jobs, max_jobs_last_updated)
+                    pool = [j for j in pool if j.is_alive()]
 
-            # Create, track, and start the job.
-            job = billiard.process.Process(
-                target=self.send, args=(batch['files'], batch['deployment_number']))
-            pool.append(job)
-            job.start()
-            self.logger.info(
-                "Ingesting %s files for %s from the queue in PID %s." % (
-                    len(batch['files']), batch['mask'], job.pid))
+                # Create, track, and start the job.
+                job = billiard.process.Process(
+                    target=self.send, args=(batch['files'], batch['deployment_number']))
+                pool.append(job)
+                job.start()
+                self.logger.info(
+                    "Ingesting %s files for %s from the queue in PID %s." % (
+                        len(batch['files']), batch['mask'], job.pid))
 
-        # Wait for all jobs to end completely.
-        while any([job for job in pool if job.is_alive()]):
-            pass
+            # Wait for all jobs to end completely.
+            while any([job for job in pool if job.is_alive()]):
+                pass
+        else:
+            while self.queue:
+                batch = self.queue.popleft()
+                self.logger.info(
+                    "Ingesting %s files for %s from the queue." % (len(batch['files']), batch['mask'])
+                    )
+                self.send(batch['files'], batch['deployment_number'])
 
         self.logger.info("All batches completed.")
 

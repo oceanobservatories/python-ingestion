@@ -265,7 +265,7 @@ class Ingestion(models.Model):
                     DataFile.objects.get_or_create(file_path=file_path, status="pending")
             
             self.status = 'running'
-            ingestor.ingest_from_queue(use_billiard=True)
+            ingestor.ingest_from_queue(use_billiard=False)
             self.status = 'complete'
         except:
             traceback.print_exc(file=sys.stdout)
