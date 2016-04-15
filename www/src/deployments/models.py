@@ -138,39 +138,6 @@ class Deployment(models.Model):
                         deployment=self, file_mask=mask, data_source=data_source_type, **route)[0])
         return data_groups
 
-    def ingest(self, annotations={}, ingest_options={}):
-        options = INGESTOR_OPTIONS
-        options.update(ingest_options)
-        ingestor = Ingestor(**options)
-
-        result = {
-            'deployment': self,
-            'user': annotations.get('user'),
-            'success': True
-            }
-
-        routes = {}
-        for d in self.data_groups.all():
-            parameters = {
-                'uframe_route': d.uframe_route, 
-                'reference_designator': d.reference_designator, 
-                'data_source': d.data_source.name,
-                }
-            if d.file_mask in routes.keys():
-                routes[d.file_mask].append(parameters)
-            else:
-                routes[d.file_mask] = [parameters]
-        data_groups = [(mask, routes[mask]) for mask in routes]
-
-        try:
-            for mask, routes in data_groups:
-                ingestor.load_queue(mask, routes, self.number)
-            ingestor.ingest_from_queue(use_billiard=True)
-        except:
-            traceback.print_exc(file=sys.stdout)
-            result['success'] = False
-        return result
-
     def get_absolute_url(self):
         return reverse('deployments:detail', kwargs={'slug': self.designator, })
 
@@ -185,7 +152,6 @@ class DataGroup(models.Model):
     data_source = models.ForeignKey(DataSourceType, null=True, blank=True)
 
 class DataFile(models.Model):
-    data_group = models.ForeignKey(DataGroup)
     file_path = models.CharField(max_length=255)
     status = models.CharField(max_length=20, choices=DATA_FILE_STATUS_CHOICES)
 
@@ -196,7 +162,6 @@ class Ingestion(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)
     status = models.CharField(max_length=20, 
         choices=INGESTION_STATUS_CHOICES, default="pending")
-    active = models.BooleanField(default=False)
 
     # Options
     test_mode = models.BooleanField(default=False,
@@ -209,6 +174,8 @@ class Ingestion(models.Model):
         verbose_name="Enable Health Check")
     sleep_timer = models.IntegerField(null=True, blank=True,
         verbose_name="Sleep Timer")
+    max_file_age = models.IntegerField(blank=True, null=True,
+        verbose_name="Max File Age")
     start_date = models.DateField(blank=True, null=True,
         verbose_name="Start Date")
     end_date = models.DateField(blank=True, null=True,
@@ -229,10 +196,84 @@ class Ingestion(models.Model):
         verbose_name="QPID Server Password")
 
     def get_absolute_url(self):
-        return self.deployment.get_absolute_url()
+        return reverse(
+            'deployments:ingestion_detail', 
+            kwargs={
+                'deployment_designator': self.deployment.designator, 
+                'index': self.index,
+                })
 
     def designator(self):
         return u"%s-%d" % (self.deployment.designator, self.index)
+
+    def configuration_fieldsets(self):
+        def get_verbose_name(s):
+            return self.__class__._meta.get_field_by_name(s)[0].verbose_name
+        fieldsets = (
+            ('Switches', 'test_mode', 'force_mode', 'health_check_enabled', ),
+            ('File Ingestion', 'sleep_timer', 'max_file_age', 'start_date', 'end_date', 'quick_look_quantity', ),
+            ('QPID', 'qpid_host', 'qpid_port', 'qpid_user', 'qpid_password', ),
+            ('EDEX', 'edex_command', 'cooldown', 'no_edex', ),
+            )
+        return [
+            {'heading': fieldset[0],
+            'fields': [{
+                    'label': get_verbose_name(field), 
+                    'value': getattr(self, field),
+                    }
+                for field in fieldset[1:]
+                ]}
+            for fieldset in fieldsets
+            ]
+
+    @property
+    def options(self):
+        return {
+            k: v for k, v in self.__dict__.iteritems() 
+            if k not in ('state', 'deployment_id', 'id', 'index', 'timestamp')
+            }
+
+    def ingest(self, annotations={}):
+        ingestor = Ingestor(**self.options)
+
+        result = {
+            'deployment': self.deployment,
+            'user': annotations.get('user'),
+            'success': True
+            }
+
+        routes = {}
+        for d in self.deployment.data_groups.all():
+            parameters = {
+                'uframe_route': d.uframe_route, 
+                'reference_designator': d.reference_designator, 
+                'data_source': d.data_source.name,
+                }
+            if d.file_mask in routes.keys():
+                routes[d.file_mask].append(parameters)
+            else:
+                routes[d.file_mask] = [parameters]
+        data_groups = [(mask, routes[mask]) for mask in routes]
+
+        try:
+            for mask, routes in data_groups:
+                ingestor.load_queue(mask, routes, self.deployment.number)
+            
+            # Analyze the queue.
+            for batch in ingestor.queue:
+                for file_path in batch['files']:
+                    DataFile.objects.get_or_create(file_path=file_path, status="pending")
+            
+            self.status = 'running'
+            ingestor.ingest_from_queue(use_billiard=True)
+            self.status = 'complete'
+        except:
+            traceback.print_exc(file=sys.stdout)
+            result['success'] = False
+        return result
+
+    def log_action(self, user, action):
+        IngestionAction.objects.create(ingestion=self, user=user, action=action)
 
 class Action(PolymorphicModel):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="actions")
@@ -240,10 +281,16 @@ class Action(PolymorphicModel):
     timestamp = models.DateTimeField(auto_now_add=True)
 
     def __unicode__(self):
-        return u"%s: %s" % (self.user, self.action)
+        return u"%s: %s" % (self.user.get_full_name(), self.action)
 
 class DeploymentAction(Action):
     deployment = models.ForeignKey(Deployment, related_name="actions")
+
+class IngestionAction(Action):
+    ingestion = models.ForeignKey(Ingestion, related_name="actions")
+
+class DataFileAction(Action):
+    data_file = models.ForeignKey(DataFile, related_name="actions")
 
 @receiver(models.signals.post_save, sender=DeploymentAction)
 def on_created(instance, created, **kwargs):

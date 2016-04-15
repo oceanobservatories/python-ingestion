@@ -60,6 +60,7 @@ Desktop.ini
 
 # Migrations
 src/deployments/migrations/*.*
+src/triage/migrations/*.*
 
 # Project Media
 src/media/*.*

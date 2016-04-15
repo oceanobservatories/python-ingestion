@@ -5,8 +5,8 @@ from django.core import management
 from deployments.management.commands import deployment_log_action
 
 @shared_task
-def ingest(deployment, **kwargs):
-    return deployment.ingest(**kwargs)
+def ingest(ingestion, **kwargs):
+    return ingestion.ingest(**kwargs)
 
 @task_success.connect
 def task_success_handler(sender=None, result=None, **kwargs):

@@ -6,6 +6,7 @@ from django.views import generic
 from deployments.models import Deployment, Ingestion
 from deployments.forms import DeploymentCreateFromCSVForm, IngestionForm
 from deployments import tasks
+from deployments.settings import INGESTOR_OPTIONS
 
 class DeploymentListView(generic.ListView):
     model = Deployment
@@ -64,6 +65,9 @@ class IngestionCreateView(generic.edit.CreateView):
     form_class = IngestionForm
 
     def form_valid(self, form):
+        for field in INGESTOR_OPTIONS:
+            if not getattr(form.instance, field):
+                setattr(form.instance, field, INGESTOR_OPTIONS[field])
         form.instance.deployment = Deployment.get_by_designator(
             self.kwargs.pop('deployment_designator', None))
         return super(IngestionCreateView, self).form_valid(form)

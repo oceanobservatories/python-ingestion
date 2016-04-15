@@ -4,12 +4,52 @@
 <div class="row">
 	<div class="col-md-12">
 		<h1>Ingestion Details <small>[{{ object.designator }}]</small></h1>
-		<hr>
 	</div>
 </div>
 <div class="row">
-	<div class="col-md-12">
-		{{ object }}
+	<div class="col-md-4">
+		<div class="panel panel-default">
+			<div class="panel-heading">
+			</div>
+			<div class="panel-body">
+				<p><strong>Deployment</strong>: <a href="{% url 'deployments:detail' object.deployment.designator %}">{{  object.deployment }}</a></p>
+				<p><strong>Ingestion Index:</strong> {{ object.index }}</p>
+				<p><strong>Created On</strong>: {{ object.timestamp }}</p>
+				<p>
+					<ul>
+						{% for action in object.actions.all %}
+						<li>{{ action }}</li>
+						{% endfor %}
+					</ul>
+				</p>
+			</div>
+		</div>
 	</div>
+	<div class="col-md-8">
+		<div class="panel panel-default">
+			<div class="panel-heading"></div>
+			<div class="panel-body">
+				<form enctype="multipart/form-data" action="" method="post">
+					{% csrf_token %}
+					<input type="submit" name="_ingest" value="Ingest" class="btn btn-default"/>
+				</form>
+			</div>
+		</div>
+	</div>
+</div>
+<div class="row">
+	{% for fieldset in object.configuration_fieldsets %}
+	<div class="col-md-3">
+		<fieldset>
+			<legend>{{ fieldset.heading }}</legend>
+			{% for field in fieldset.fields %}
+				<p>
+					<strong>{{ field.label }}</strong><br>
+					{{ field.value }}
+				</p>
+			{% endfor %}
+		</fieldset>
+	</div>
+	{% endfor %}
 </div>
 {% endblock %}

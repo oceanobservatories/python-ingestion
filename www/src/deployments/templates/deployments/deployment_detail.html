@@ -111,10 +111,6 @@
 						<p>
 							<a class="btn btn-default" href="{% url 'deployments:ingestion_create' object.designator %}">Add a new ingestion</a>
 						</p>
-						<form enctype="multipart/form-data" action="" method="post">
-							{% csrf_token %}
-							<input type="submit" name="_ingest" value="Ingest" class="btn btn-default"/>
-						</form>
 					</div>
 				</div>
 			</div>

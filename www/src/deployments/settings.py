@@ -19,6 +19,7 @@ INGESTOR_OPTIONS = {
     'max_file_age': config.MAX_FILE_AGE,
     'start_date': config.START_DATE,
     'end_date': config.END_DATE,
+    'max_file_age': config.MAX_FILE_AGE,
     'cooldown': config.EDEX['cooldown'],
     'quick_look_quantity': config.QUICK_LOOK_QUANTITY,
     'edex_command': config.EDEX['command'],
