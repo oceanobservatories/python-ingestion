@@ -574,6 +574,7 @@ class Ingestor(object):
 
                 # Check if the EDEX services are still running. If not, attempt to restart them.
                 if not self.no_edex:
+                    self.logger.error("waiting for services to restart")
                     self.service_manager.wait_until_ready(previous_data_file)
                 ingestion_command = ("ingestsender",
                     uframe_route, data_file, reference_designator, data_source, deployment_number)
