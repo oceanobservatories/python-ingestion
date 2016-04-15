@@ -510,6 +510,7 @@ class Ingestor(object):
         self.logger.info('')
         pool = []
         if use_billiard:
+            self.logger.info("Using multiprocessing to ingest.")
             while self.queue:
                 batch = self.queue.popleft()
                 # Wait for any job slots to become available
@@ -531,6 +532,7 @@ class Ingestor(object):
             while any([job for job in pool if job.is_alive()]):
                 pass
         else:
+            self.logger.info("Using single process to ingest.")
             while self.queue:
                 batch = self.queue.popleft()
                 self.logger.info(
@@ -544,6 +546,8 @@ class Ingestor(object):
         ''' Calls UFrame's ingest sender application with the appropriate command-line arguments 
             for all files specified in the files list. '''
 
+        self.logger.info("entered send command")
+
         # Define some helper methods.
         def annotate_parameters(filename, route, designator, source):
             ''' Turn the ingestion parameters into a dictionary with descriptive keys.'''
@@ -554,7 +558,9 @@ class Ingestor(object):
                 'data_source': source,
                 }
 
+        self.logger.info("getting PID")
         sender_process = multiprocessing.current_process()
+        self.logger.info("pid is %s" % sender_process)
 
         deployment_number = str(deployment_number)
 
