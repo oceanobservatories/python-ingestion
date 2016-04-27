@@ -9,9 +9,14 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument('deployment', type=str)
         parser.add_argument('index', type=int)
+        parser.add_argument('-c', '--use_celery', action='store_true',
+            help="Use celery to ingest.")
 
     def handle(self, *args, **options):
         ingestion = models.Ingestion.objects.get(
             deployment=models.Deployment.get_by_designator(options['deployment']),
             index=options['index'])
-        tasks.ingest.delay(ingestion, annotations={'user': None, })
+        if options['use_celery']:
+            tasks.ingest.delay(ingestion, annotations={'user': None, })
+        else:
+            ingestion.ingest(annotations={'user': None, })
