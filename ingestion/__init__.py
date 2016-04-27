@@ -32,11 +32,15 @@ def set_options(object, attrs, options):
 class QpidSender:
     ''' A helper class for sending ingest messages to ooi uframe with qpid.'''
     def __init__(self, address, host="localhost", port=5672, user="guest", password="guest"):
+        self.logger = logging.getLogger("QPID")
+
         self.host = host
         self.port = port
         self.user = user
         self.password = password
         self.address = address
+
+        self.logger.info("Created QpidSender for %s" % self.address)
 
     def connect(self):
         self.connection = qm.Connection(
@@ -48,6 +52,7 @@ class QpidSender:
         self.connection.open()
         self.session = self.connection.session()
         self.sender = self.session.sender(self.address)
+        self.logger.info("Connection open for %s" % self.address)
 
     def send(self, message, content_type, sensor, delivery_type, deployment_number):
         self.sender.send(
@@ -546,8 +551,6 @@ class Ingestor(object):
         ''' Calls UFrame's ingest sender application with the appropriate command-line arguments 
             for all files specified in the files list. '''
 
-        self.logger.info("entered send command")
-
         # Define some helper methods.
         def annotate_parameters(filename, route, designator, source):
             ''' Turn the ingestion parameters into a dictionary with descriptive keys.'''
@@ -558,9 +561,7 @@ class Ingestor(object):
                 'data_source': source,
                 }
 
-        self.logger.info("getting PID")
         sender_process = multiprocessing.current_process()
-        self.logger.info("pid is %s" % sender_process)
 
         deployment_number = str(deployment_number)
 
@@ -574,7 +575,6 @@ class Ingestor(object):
 
                 # Check if the EDEX services are still running. If not, attempt to restart them.
                 if not self.no_edex:
-                    self.logger.error("waiting for services to restart")
                     self.service_manager.wait_until_ready(previous_data_file)
                 ingestion_command = ("ingestsender",
                     uframe_route, data_file, reference_designator, data_source, deployment_number)

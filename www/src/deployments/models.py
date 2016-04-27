@@ -11,9 +11,6 @@ from django.dispatch import receiver
 
 from ingestion import Ingestor
 
-from deployments.settings import INGESTOR_OPTIONS
-
-
 DATA_SOURCE_TYPE_DEFAULTS = {
     'R': 'recovered', 
     'D': 'telemetered', 
