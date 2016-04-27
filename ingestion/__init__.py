@@ -34,11 +34,11 @@ class QpidSender:
     def __init__(self, address, host="localhost", port=5672, user="guest", password="guest"):
         self.logger = logging.getLogger("QPID")
 
-        self.host = host
+        self.host = str(host)
         self.port = port
-        self.user = user
-        self.password = password
-        self.address = address
+        self.user = str(user)
+        self.password = str(password)
+        self.address = str(address)
 
         self.logger.info("Created QpidSender for %s" % self.address)
 
