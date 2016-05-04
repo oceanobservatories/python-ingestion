@@ -4,7 +4,7 @@ from django.db import models
 
 from triage import definitions
 
-class LogEvent(models.Model):
+class EDEXEvent(models.Model):
     type = models.CharField(max_length=255, choices=definitions.LOG_EVENT_TYPES)
     level = models.CharField(max_length=255, choices=definitions.LOG_EVENT_LEVELS)
     timestamp = models.DateTimeField()

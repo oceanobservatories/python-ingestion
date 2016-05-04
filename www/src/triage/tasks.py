@@ -1,7 +1,7 @@
 from celery import shared_task
 from datetime import datetime
 
-from triage.models import LogEvent
+from triage.models import EDEXEvent
 
 def get_log_header_parts(line):
     parts = line.strip().split(' ', 4)
@@ -83,7 +83,6 @@ def save_log(line):
             data.update(get_part_count_data(p[1]))
         else:
             return
-        print 'Adding log: %s' % data
-        # LogEvent.objects.create(**data)
+        EDEXEvent.objects.create(**data)
     except:
         pass

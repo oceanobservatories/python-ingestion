@@ -135,7 +135,7 @@
 					</thead>
 					<tbody>
 						{% for data_group in object.data_groups.all %}
-							<tr class="main-row link-row" data-target="#dataGroupDetail_{{ data_group.id }}" data-toggle="collapse" aria-expanded="false" aria-controls="dataGroupDetail_{{ data_group.id }}">
+							<tr class="main-row expand-row" data-target="#dataGroupDetail_{{ data_group.id }}" data-toggle="collapse" aria-expanded="false" aria-controls="dataGroupDetail_{{ data_group.id }}">
 								<td>{{ data_group.file_mask }}</td>
 								<td>{{ data_group.reference_designator }}</td>
 								<td>{{ data_group.uframe_route }}</td>
