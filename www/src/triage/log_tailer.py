@@ -20,6 +20,7 @@ if __name__ == '__main__':
     try:
         print 'Tailing process started for %s' % sys.argv[1]
         for line in tailer.follow(open(sys.argv[1]), 0.1):
-            tasks.save_log.delay(line)
+            if '[Ingest.' in line and ('FileDecoder:' in line or 'ParticleFactory' in line):
+                tasks.save_log.delay(line)
     except:
         pass

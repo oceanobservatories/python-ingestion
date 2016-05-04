@@ -61,30 +61,29 @@ def get_part_count_data(line):
 
 @shared_task
 def save_log(line):
-    if '[Ingest.' in line and ('FileDecoder:' in line or 'ParticleFactory' in line):
-        header_parts = get_log_header_parts(line)
-        try:
-            level = header_parts[0]
-            timestamp = datetime.strptime('%s %s' % (header_parts[1], header_parts[2]),
-                                          '%Y-%m-%d %H:%M:%S,%f')
-            p = header_parts[3].split('] ', 1)
-            route = p[0].replace('[Ingest.', '')
-            data = {'level': level, 'timestamp': timestamp, 'route': route}
-            if level in ['ERROR', 'WARN']:
-                data['type'] = 'ingest_error'
-                data['filename'] = ''
-                data['error_details'] = p[1]
-            elif '* Processing file:' in p[1]:
-                data.update(get_start_data(p[1]))
-            elif '* Finished Processing file:' in p[1]:
-                data.update(get_end_data(p[1]))
-            elif 'Adding provenance' in p[1]:
-                data.update(get_prov_data(p[1]))
-            elif 'ParticleFactory' in p[1]:
-                data.update(get_part_count_data(p[1]))
-            else:
-                return
-            print 'Adding log: %s' % data
-            # LogEvent.objects.create(**data)
-        except:
-            pass
+    header_parts = get_log_header_parts(line)
+    try:
+        level = header_parts[0]
+        timestamp = datetime.strptime('%s %s' % (header_parts[1], header_parts[2]),
+                                      '%Y-%m-%d %H:%M:%S,%f')
+        p = header_parts[3].split('] ', 1)
+        route = p[0].replace('[Ingest.', '')
+        data = {'level': level, 'timestamp': timestamp, 'route': route}
+        if level in ['ERROR', 'WARN']:
+            data['type'] = 'ingest_error'
+            data['filename'] = ''
+            data['error_details'] = p[1]
+        elif '* Processing file:' in p[1]:
+            data.update(get_start_data(p[1]))
+        elif '* Finished Processing file:' in p[1]:
+            data.update(get_end_data(p[1]))
+        elif 'Adding provenance' in p[1]:
+            data.update(get_prov_data(p[1]))
+        elif 'ParticleFactory' in p[1]:
+            data.update(get_part_count_data(p[1]))
+        else:
+            return
+        print 'Adding log: %s' % data
+        # LogEvent.objects.create(**data)
+    except:
+        pass
