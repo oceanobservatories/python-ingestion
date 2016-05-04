@@ -1,3 +1,4 @@
+from celery import shared_task
 from datetime import datetime
 
 from triage.models import LogEvent
@@ -58,7 +59,7 @@ def get_part_count_data(line):
     except:
         return None
 
-#@shared_task
+@shared_task
 def save_log(line):
     if '[Ingest.' in line and ('FileDecoder:' in line or 'ParticleFactory' in line):
         header_parts = get_log_header_parts(line)
@@ -84,6 +85,6 @@ def save_log(line):
             else:
                 return
             print 'Adding log: %s' % data
-            LogEvent.objects.create(**data)
+            # LogEvent.objects.create(**data)
         except:
             pass

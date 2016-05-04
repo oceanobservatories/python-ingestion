@@ -41,7 +41,7 @@ def exit_handler(sig, frame):
 signal.signal(signal.SIGTERM, exit_handler)
 signal.signal(signal.SIGINT, exit_handler)
 
-todays_file = 'edex-ooi-%s.log' % datetime.date.today().strftime('%Y%m%d')
+todays_file = '/home/asadev/uframes/ooi/uframe-1.0/edex/logs/edex-ooi-%s.log' % datetime.date.today().strftime('%Y%m%d')
 if os.path.isfile(todays_file):
     tailer_process = subprocess.Popen(['python', 'log_tailer.py', todays_file])
 
