@@ -3,6 +3,7 @@ import sys, traceback
 
 from django.conf import settings
 from django.core.urlresolvers import reverse
+from django.core.files.base import ContentFile
 
 from django.db import models
 from polymorphic.models import PolymorphicModel
@@ -82,11 +83,23 @@ class Deployment(models.Model):
         def html_link_to_object(self, text):
             return "<a href='%s'>%s</a>" % (self.object.get_absolute_url(), text)
 
+    class BadDesignator(Exception):
+        def __init__(self, designator):
+            self.message = u"Can't parse the deployment's designator (%s)." % designator
+
     @classmethod
     def split_designator(cls, designator):
-        reference_designator, deployment = designator.split("_")[:2]
-        number = int(deployment[-5:])
-        data_source_abbr = deployment[:-5]
+        reference_designator, deployment = [
+            x for x 
+            in designator.split(".")[0].split("/")[-1].split("_") 
+            if x != "ingest"
+            ]
+        deployment = deployment.split("-")[0]
+        try:
+            number = int(deployment[1:6])
+            data_source_abbr = deployment[0]
+        except:
+            raise cls.BadDesignator(designator)
         return reference_designator, data_source_abbr, number
 
     @classmethod
@@ -101,6 +114,24 @@ class Deployment(models.Model):
             return cls.objects.create(
                 platform=platform, data_source=data_source, number=number, csv_file=csv_file)
         raise cls.AlreadyExists(deployment)
+
+    @classmethod
+    def create_or_update_from_content(cls, file_name, content):
+        ''' Create a new Deployment object from a FieldFile object. '''
+        reference_designator, data_source_abbr, number = cls.split_designator(file_name)
+        platform, p_created = Platform.objects.get_or_create(reference_designator=reference_designator)
+        data_source, ds_created = DataSourceType.get_or_create_from(abbr=data_source_abbr)
+        try:
+            deployment = cls.objects.get(
+                platform=platform, data_source=data_source, number=number)
+            created = False
+        except cls.DoesNotExist:
+            deployment = cls.objects.create(
+                platform=platform, data_source=data_source, number=number)
+            created = True
+        deployment.csv_file.save(file_name, ContentFile(content))
+        deployment.save()
+        return deployment, created
     
     @classmethod
     def get_by_designator(cls, designator):

@@ -1,3 +1,6 @@
+from github import Github
+from StringIO import StringIO
+
 from django.contrib import messages
 from django.http import Http404, HttpResponseRedirect
 from django.shortcuts import render
@@ -6,7 +9,7 @@ from django.views import generic
 from deployments.models import Deployment, Ingestion
 from deployments.forms import DeploymentCreateFromCSVForm, IngestionForm
 from deployments import tasks
-from deployments.settings import INGESTOR_OPTIONS
+from deployments.settings import INGESTOR_OPTIONS, GITHUB_TOKEN
 
 class DeploymentListView(generic.ListView):
     model = Deployment
@@ -51,6 +54,10 @@ class DeploymentCreateView(generic.edit.FormView):
             msg = "%s %s." % (e.message, e.html_link_to_object("View the deployment"))
             messages.warning(self.request, msg)
             return super(DeploymentCreateView, self).form_invalid(form)
+        except Deployment.BadDesignator, e:
+            msg = "%s Check that the file name is correct." % (e, message)
+            messages.warning(self.request, e.message)
+            return super(DeploymentCreateView, self).form_invalid(form)
         else:
             self.new_deployment.process_csv()
             self.new_deployment.log_action(self.request.user, 
@@ -59,6 +66,46 @@ class DeploymentCreateView(generic.edit.FormView):
 
     def get_success_url(self):
         return self.new_deployment.get_absolute_url()
+
+class DeploymentGithubImportView(generic.TemplateView):
+    template_name = "deployments/deployment_github_import.html"
+
+    def post(self, request, *args, **kwargs):
+        if "_import" in request.POST:
+            repository = [
+                o for o 
+                in Github(GITHUB_TOKEN).get_user().get_orgs() 
+                if o.login=='ooi-integration'
+                ][0].get_repo('ingestion-csvs')
+
+            def get_csvs(repo, filepath, _csv_files={}):
+                for item in repo.get_dir_contents(filepath):
+                    if "#" in item.path:
+                        continue
+                    if item.type == "dir":
+                        print item.path
+                        _csv_files = get_csvs(repo, item.path)
+                    elif item.path.endswith(".csv"):
+                        print item.path
+                        _csv_files[item.path] = item.decoded_content
+                return _csv_files
+
+            csv_files = get_csvs(repository, ".")
+
+            for f in csv_files:
+                csv_file = csv_files[f]
+                new_deployment, created = Deployment.create_or_update_from_content(f, csv_file)
+                print new_deployment.designator, created
+                new_deployment.process_csv()
+                print "processed"
+                if created:
+                    new_deployment.log_action(self.request.user, "Created.")
+                else:
+                    new_deployment.log_action(self.request.user, "Updated from Github.")
+                new_deployment.log_action(self.request.user, 
+                    "Processed CSV and created %d new data groups." % new_deployment.data_groups.count())
+        return super(DeploymentGithubImportView, self).dispatch(request, *args, **kwargs)
+
 
 class IngestionCreateView(generic.edit.CreateView):
     template_name = "deployments/ingestion_form.html"

@@ -32,3 +32,5 @@ INGESTOR_OPTIONS = {
 INGESTOR_OPTIONS.update(settings.INGESTOR_OPTIONS)
 INGESTOR_OPTIONS['start_date'] = parse_date(INGESTOR_OPTIONS['start_date'])
 INGESTOR_OPTIONS['end_date'] = parse_date(INGESTOR_OPTIONS['end_date'])
+
+GITHUB_TOKEN = config.GITHUB_TOKEN
