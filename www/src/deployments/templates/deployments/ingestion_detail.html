@@ -53,11 +53,11 @@
 					</thead>
 					<tbody>
 						{% for data_file in object.data_files.all %}
-							<tr class="main-row expand-row" data-target="#dataGroupDetail_{{ data_file.id }}" data-toggle="collapse" aria-expanded="false" aria-controls="dataFileDetail_{{ data_file.id }}">
+							<tr class="main-row expand-row" data-target="#dataFileDetail_{{ data_file.id }}" data-toggle="collapse" aria-expanded="false" aria-controls="dataFileDetail_{{ data_file.id }}">
 								<td>{{ data_file.file_path }}</td>
 								<td>{{ data_file.status }}</td>
 							</tr>
-							<tr class="collapse detail-row" id="dataFileDetail_{{ data_group.id }}">
+							<tr class="collapse detail-row" id="dataFileDetail_{{ data_file.id }}">
 								<td colspan="4">Extra information</td>
 							</tr>
 						{% endfor %}
