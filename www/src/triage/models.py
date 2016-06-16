@@ -26,4 +26,4 @@ class EDEXEvent(PolymorphicModel):
         return "[%s] %s: %s" % (self.timestamp, self.type, self.filename)
 
 class FileEvent(EDEXEvent):
-    data_file = models.ForeignKey(DataFile)
+    data_file = models.ForeignKey(DataFile, related_name="events")

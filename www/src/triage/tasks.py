@@ -88,6 +88,7 @@ def save_log(line):
             data['data_file'] = DataFile.objects.get(file_path=data['filename'])
             FileEvent.objects.create(**data)
         else:
-            EDEXEvent.objects.create(**data)
+            pass
+            # EDEXEvent.objects.create(**data)
     except:
         pass
