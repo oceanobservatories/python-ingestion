@@ -1,0 +1,15 @@
+{% extends "deployments/deployment_base.html" %}
+{% load crispy_forms_tags %}
+
+{% block content %}
+<div class="row">
+	<div class="col-md-6">
+		<h1>Import CSVs from Github</h1>
+		<p>Import and update ingestion CSVs from Github repository.</p>
+		<form enctype="multipart/form-data" action="" method="post">
+			{% csrf_token %}
+			<input type="submit" name="_import" value="Import from Github" class="btn btn-default"/>
+		</form>
+	</div>
+</div>
+{% endblock %}

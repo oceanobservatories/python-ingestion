@@ -179,10 +179,6 @@ class DataGroup(models.Model):
     reference_designator = models.CharField(max_length=255)
     data_source = models.ForeignKey(DataSourceType, null=True, blank=True)
 
-class DataFile(models.Model):
-    file_path = models.CharField(max_length=255)
-    status = models.CharField(max_length=20, choices=DATA_FILE_STATUS_CHOICES)
-
 class Ingestion(models.Model):
     # Metadata
     deployment = models.ForeignKey(Deployment, related_name="ingestions")
@@ -302,6 +298,11 @@ class Ingestion(models.Model):
 
     def log_action(self, user, action):
         IngestionAction.objects.create(ingestion=self, user=user, action=action)
+
+class DataFile(models.Model):
+    file_path = models.CharField(max_length=255)
+    status = models.CharField(max_length=20, choices=DATA_FILE_STATUS_CHOICES)
+    ingestion = models.ForeignKey(Ingestion)
 
 class Action(PolymorphicModel):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="actions")
