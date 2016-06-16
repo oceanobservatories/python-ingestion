@@ -58,7 +58,11 @@
 								<td>{{ data_file.status }}</td>
 							</tr>
 							<tr class="collapse detail-row" id="dataFileDetail_{{ data_file.id }}">
-								<td colspan="4">Extra information</td>
+								<td colspan="2">
+								{% for event in data_file.events.all %}
+									{{ event.timestamp}}: {{ event.type }}: {{ event.route }}<br>
+								{% endfor %}
+								</td>
 							</tr>
 						{% endfor %}
 					</tbody>
