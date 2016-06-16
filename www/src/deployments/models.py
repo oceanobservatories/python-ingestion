@@ -286,7 +286,7 @@ class Ingestion(models.Model):
             # Analyze the queue.
             for batch in ingestor.queue:
                 for file_path, routes in batch['files']:
-                    DataFile.objects.get_or_create(file_path=file_path, status="pending")
+                    DataFile.objects.get_or_create(file_path=file_path, status="pending", ingestion=self)
             
             self.status = 'running'
             ingestor.ingest_from_queue(use_billiard=False)
