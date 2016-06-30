@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Environment
+
+# UFRAME_HOME must be set to the UFRAME instance that includes the PostgreSQL installation
+# e.g.
+# export UFRAME_HOME=/local/asadev/uframes/ooi_20160308_ea1dae28/uframe-1.0/
+
+export PATH=$UFRAME_HOME/extras/bin:$UFRAME_HOME/cdo/bin:$UFRAME_HOME/psql/bin:$UFRAME_HOME/postgresql/bin:$UFRAME_HOME/notification/bin:$JAVA_HOME/bin:$UFRAME_HOME/tools/bin:$UFRAME_HOME/GFESuite/bin:$UFRAME_HOME/GFESuite/ServiceBackup/scripts:$UFRAME_HOME/fxa/bin:$UFRAME_HOME/cassandra/bin:$PATH
+
+export LD_LIBRARY_PATH=$UFRAME_HOME/psql/lib:$UFRAME_HOME/postgresql/lib:$LD_LIBRARY_PATH
