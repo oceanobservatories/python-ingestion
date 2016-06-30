@@ -2,7 +2,8 @@
 # Copy this file to config.yml and adjust the settings as necessary.
 
 SLEEP_TIMER: 0              # The amount of time (in seconds) to wait in between ingestion commands.
-MAX_FILE_AGE: null          # The max age of a file (in seconds) to ingest. Use for active deployments and cron jobs.
+MAX_FILE_AGE: 86400         # Only ingest files newer than specified value. Use for active deployments and cron jobs.
+MIN_FILE_AGE: 7500          # Only ingest files older than specified value. Use for active deployments and cron jobs.
 QUICK_LOOK_QUANTITY: null   # The max number of files per file mask to ingest. Used for quick look ingestions.
 START_DATE: null            # The earliest date a file can have to be included in ingestion (YYYY-MM-DD).
 END_DATE: null              # The latest date a file can have to be included in ingestion (YYYY-MM-DD).

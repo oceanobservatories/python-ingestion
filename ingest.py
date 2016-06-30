@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
-import os, argparse
-from glob import glob
+import argparse
 from datetime import datetime
 
 import logging
@@ -15,61 +14,64 @@ parser = argparse.ArgumentParser(description="Ingest data to UFrame.")
 subparsers = parser.add_subparsers(dest="task")
 
 # From CSV (from_csv)
-parser_from_csv = subparsers.add_parser('from_csv', 
-    help="Ingest using parameters in a CSV file.")
-parser_from_csv.add_argument('files', nargs='*', 
-    help="Path to CSV file.")
+parser_from_csv = subparsers.add_parser('from_csv',
+                                        help="Ingest using parameters in a CSV file.")
+parser_from_csv.add_argument('files', nargs='*',
+                             help="Path to CSV file.")
 
 # From File (from_file)
-parser_single_file = subparsers.add_parser('from_file', 
-    help="Ingest a single file.")
+parser_single_file = subparsers.add_parser('from_file',
+                                           help="Ingest a single file.")
 parser_single_file.add_argument('files', nargs='*',
-    help="Path to data file.")
-parser_single_file.add_argument('uframe_route', 
-    help="UFrame route.")
-parser_single_file.add_argument('reference_designator', 
-    help="Reference Designator.")
-parser_single_file.add_argument('data_source', 
-    help="Data source (i.e. telemetered, recovered, etc.).")
-parser_single_file.add_argument('deployment_number', 
-    help="Deployment number.")
+                                help="Path to data file.")
+parser_single_file.add_argument('uframe_route',
+                                help="UFrame route.")
+parser_single_file.add_argument('reference_designator',
+                                help="Reference Designator.")
+parser_single_file.add_argument('data_source',
+                                help="Data source (i.e. telemetered, recovered, etc.).")
+parser_single_file.add_argument('deployment_number',
+                                help="Deployment number.")
 
 # Dummy (dummy)
-parser_dummy = subparsers.add_parser('dummy', 
-    help="Create ingestor but don't ingest any data.")
+parser_dummy = subparsers.add_parser('dummy',
+                                     help="Create ingestor but don't ingest any data.")
 
 # Optional Arguments
 parser.add_argument('-v', '--verbose', action='store_true',
-    help="Verbose mode. Logging messages will output to console.")
+                    help="Verbose mode. Logging messages will output to console.")
 parser.add_argument('-t', '--test', action='store_true',
-    help="Test mode. No ingestions will be sent to UFrame.")
+                    help="Test mode. No ingestions will be sent to UFrame.")
 parser.add_argument('-f', '--force', action='store_true',
-    help="Force mode. EDEX logs will not be checked for previous ingestions of the specified data.")
+                    help="Force mode. EDEX logs will not be checked for previous ingestions of the specified data.")
 parser.add_argument('-no-edex', action='store_true',
-    help="Don't check to see if EDEX is alive after every send.")
+                    help="Don't check to see if EDEX is alive after every send.")
 parser.add_argument('--sleep_timer', type=int, default=config.SLEEP_TIMER, metavar="N",
-    help="Override the sleep timer with a value of N seconds.")
+                    help="Override the sleep timer with a value of N seconds.")
 parser.add_argument('--start', default=config.START_DATE, metavar="YYYY-MM-DD",
-    help="Only ingest files newer than the specified date in the YYYY-MM-DD format.")
+                    help="Only ingest files newer than the specified date in the YYYY-MM-DD format.")
 parser.add_argument('--end', default=config.END_DATE, metavar="YYYY-MM-DD",
-    help="Only ingest files older than the specified date in the YYYY-MM-DD format.")
+                    help="Only ingest files older than the specified date in the YYYY-MM-DD format.")
 parser.add_argument('--age', type=int, default=config.MAX_FILE_AGE, metavar="N",
-    help="Only ingest files that are N seconds old or less.")
+                    help="Only ingest files that are N seconds old or less.")
+parser.add_argument('--age_min', type=int, default=config.MIN_FILE_AGE, metavar="N",
+                    help="Only ingest files that are N seconds old or more.")
 parser.add_argument('--cooldown', type=int, default=config.EDEX['cooldown'], metavar="N",
-    help="Wait N seconds after EDEX services are started before ingesting.")
+                    help="Wait N seconds after EDEX services are started before ingesting.")
 parser.add_argument('--quick', type=int, default=config.QUICK_LOOK_QUANTITY, metavar="N",
-    help="Ingest a maximum of N files per CSV.")
+                    help="Ingest a maximum of N files per CSV.")
 parser.add_argument('--qpid_host', type=str, default=config.QPID['host'], metavar="host",
-    help="The QPID server hostname.")
+                    help="The QPID server hostname.")
 parser.add_argument('--qpid_port', type=str, default=config.QPID['port'], metavar="port",
-    help="The QPID server port.")
+                    help="The QPID server port.")
 parser.add_argument('--qpid_user', type=str, default=config.QPID['user'], metavar="username",
-    help="The QPID server username.")
+                    help="The QPID server username.")
 parser.add_argument('--qpid_password', type=str, default=config.QPID['password'], metavar="password",
-    help="The QPID server password.")
+                    help="The QPID server password.")
+
 
 class Task(object):
-    ''' A helper class designed to manage the different types of ingestion tasks.'''
+    """ A helper class designed to manage the different types of ingestion tasks."""
 
     def __init__(self, args):
         self.logger = logging.getLogger('Task')
@@ -86,11 +88,12 @@ class Task(object):
         self.args = args
 
         self.options = {
-            'test_mode': self.args.test, 
+            'test_mode': self.args.test,
             'force_mode': self.args.force,
             'no_edex': self.args.no_edex,
             'sleep_timer': self.args.sleep_timer,
             'max_file_age': self.args.age,
+            'min_file_age': self.args.age_min,
             'start_date': parse_date(self.args.start),
             'end_date': parse_date(self.args.end),
             'cooldown': self.args.cooldown,
@@ -101,22 +104,22 @@ class Task(object):
             'qpid_port': self.args.qpid_port,
             'qpid_user': self.args.qpid_user,
             'qpid_password': self.args.qpid_password,
-            }
+        }
 
     def execute(self):
         getattr(self, self.args.task)()
 
     def dummy(self):
-        ''' The dummy task is used for testing basic initialization functions. It creates an 
+        """ The dummy task is used for testing basic initialization functions. It creates an
             Ingestor (which in turn creates a ServiceManager) and outputs all of the script's 
-            options to the log. '''
+            options to the log. """
         ingestor = Ingestor(**self.options)
         self.logger.info("Dummy task was run with the following options:")
         for option in sorted(["%s: %s" % (o, self.options[o]) for o in self.options]):
             self.logger.info(option)
 
     def from_csv(self):
-        ''' Ingest from specified CSV files.'''
+        """ Ingest from specified CSV files."""
         timestamp_logname = "from_csv_" + datetime.today().strftime('%Y_%m_%d_%H_%M_%S')
         csv_files = [f for f in self.args.files if f.endswith('.csv')]
         if not csv_files:
@@ -142,8 +145,6 @@ class Task(object):
         return True
 
     def from_file(self):
-        timestamp_logname = "from_file_" + datetime.today().strftime('%Y_%m_%d_%H_%M_%S')
-
         ingestor = Ingestor(**self.options)
 
         for f in self.args.files:
@@ -159,6 +160,7 @@ class Task(object):
         self.logger.info('')
         self.logger.info("Ingestion completed.")
         return True
+
 
 args = parser.parse_args()
 
