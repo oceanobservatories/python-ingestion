@@ -302,7 +302,7 @@ class Ingestion(models.Model):
 class DataFile(models.Model):
     file_path = models.CharField(max_length=255)
     status = models.CharField(max_length=20, choices=DATA_FILE_STATUS_CHOICES)
-    ingestion = models.ForeignKey(Ingestion, related_name="data_files")
+    ingestion = models.ForeignKey(Ingestion, related_name="data_files", null=True, blank=True)
 
 class Action(PolymorphicModel):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="actions")
