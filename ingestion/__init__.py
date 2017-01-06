@@ -92,7 +92,7 @@ class ServiceManager(object):
             self.logger.info("TEST MODE: EDEX server environment sourced.")
             return
 
-        Source the EDEX environment.
+        # Source the EDEX environment.
         try:
             self.logger.info("Sourcing the EDEX server environment.")
             # Adapted from http://pythonwise.blogspot.fr/2010/04/sourcing-shell-script.html
