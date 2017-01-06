@@ -3,10 +3,10 @@ import logging, logging.config
 import csv
 import yaml
 import requests
-import re
+import time
 
 from collections import deque
-from datetime import datetime, timedelta
+from datetime import datetime
 from time import sleep
 from glob import glob
 
@@ -18,6 +18,7 @@ from config import LOGGING, EDEX
 
 import logger
 
+
 def log_and_exit(error_code):
     exit_logger = logging.getLogger('Exit')
     if error_code != 0:
@@ -25,12 +26,14 @@ def log_and_exit(error_code):
     exit_logger.info("-")
     sys.exit(error_code)
 
+
 def set_options(object, attrs, options):
     for attr in attrs:
         setattr(object, attr, options.get(attr))
 
+
 class QpidSender:
-    ''' A helper class for sending ingest messages to ooi uframe with qpid.'''
+    """ A helper class for sending ingest messages to ooi uframe with qpid."""
     def __init__(self, address, host="localhost", port=5672, user="guest", password="guest"):
         self.logger = logging.getLogger("QPID")
 
@@ -67,7 +70,7 @@ class QpidSender:
         self.connection.close()
 
 class ServiceManager(object):
-    ''' A helper class that manages the services that the ingestion depends on.'''
+    """ A helper class that manages the services that the ingestion depends on."""
 
     def __init__(self, test_mode=False, force_mode=False, cooldown=60, health_check_enabled=False, edex_command=EDEX['command'], **kwargs):
 
@@ -89,7 +92,7 @@ class ServiceManager(object):
             self.logger.info("TEST MODE: EDEX server environment sourced.")
             return
 
-        # Source the EDEX environment.
+        Source the EDEX environment.
         try:
             self.logger.info("Sourcing the EDEX server environment.")
             # Adapted from http://pythonwise.blogspot.fr/2010/04/sourcing-shell-script.html
@@ -105,7 +108,7 @@ class ServiceManager(object):
             self.logger.info("EDEX server environment sourced.")
 
     def action(self, action):
-        ''' Starts or stops all services. '''
+        """ Starts or stops all services. """
         
         # Check if the action is valid.
         if action not in ("start", "stop"):
@@ -127,9 +130,9 @@ class ServiceManager(object):
             self.logger.exception("An error occurred when %sing services." % verbose_action)
             log_and_exit(4)
         else:
-            ''' When EDEX is started, it takes some time for the service to be ready. A cooldown 
-                setting from the config file specifies how long to wait before continuing the 
-                script.'''
+            """ When EDEX is started, it takes some time for the service to be ready. A cooldown
+                setting from the config file specifies how long to wait before continuing the
+                script."""
             if action == "start":
                 self.logger.info("Waiting specified cooldown time (%s seconds)" % self.cooldown)
                 sleep(self.cooldown)
@@ -144,14 +147,14 @@ class ServiceManager(object):
                 log_and_exit(4)
 
     def restart(self):
-        ''' Restart all services.'''
+        """ Restart all services."""
         self.action("stop")
         self.action("start")
 
     def refresh_status(self):
-        ''' Run the edex-server script's status command to get and store process IDs for all 
+        """ Run the edex-server script's status command to get and store process IDs for all
             services, as well as determine the actual PID for the EDEX application.
-            Returns True if all services have PIDs, and False if any one service doesn't. '''
+            Returns True if all services have PIDs, and False if any one service doesn't. """
         self.process_ids = {}
         try:
             if self.test_mode:
@@ -171,8 +174,8 @@ class ServiceManager(object):
                     value = value[0]
                 self.process_ids[name] = value
 
-            ''' Determine the child processes for edex_ooi to get the actual PID of the EDEX 
-                application. '''
+            """ Determine the child processes for edex_ooi to get the actual PID of the EDEX
+                application. """
             def child_process(parent_name):
                 return shell.pgrep("-P", self.process_ids[parent_name])[1].split('\n')[0]
             if self.test_mode:
@@ -186,7 +189,7 @@ class ServiceManager(object):
         return all(self.process_ids.itervalues())
 
     def wait_until_ready(self, previous_data_file):
-        ''' Sits in a loop until all services are up and running. '''
+        """ Sits in a loop until all services are up and running. """
         crashed = False
         while True:
             if self.refresh_status():
@@ -215,8 +218,8 @@ class ServiceManager(object):
         return True
 
     def process_log(self, log_file):
-        ''' Processes an EDEX log and creates a new log file with only the relevant, 
-            searchable data. '''
+        """ Processes an EDEX log and creates a new log file with only the relevant,
+            searchable data. """
 
         new_log_file = "/".join((EDEX['processed_log_path'], log_file.split("/")[-1] + ".p"))
 
@@ -226,8 +229,8 @@ class ServiceManager(object):
                 os.path.getmtime(log_file))
             new_log_file_timestamp = datetime.fromtimestamp(
                 os.path.getmtime(new_log_file))
-            ''' Check to see if the original log file has been modified since being previously 
-                processed. '''
+            """ Check to see if the original log file has been modified since being previously
+                processed. """
             if log_file_timestamp < new_log_file_timestamp:
                 self.logger.info(
                     "%s has already been processed." % log_file)
@@ -247,7 +250,7 @@ class ServiceManager(object):
             "%s has been processed and written to %s." % (log_file, new_log_file))
 
     def process_all_logs(self):
-        ''' Processes all EDEX logs in preparation for duplicate ingestion prevention. '''
+        """ Processes all EDEX logs in preparation for duplicate ingestion prevention. """
 
         # Build a list of all valid EDEX logs
         for log_path in EDEX['log_paths']:
@@ -262,35 +265,36 @@ class ServiceManager(object):
         return glob("/".join((EDEX['processed_log_path'], "*.p")))
 
 class Ingestor(object):
-    ''' A helper class designed to handle the ingestion process.'''
+    """ A helper class designed to handle the ingestion process."""
     logger = logging.getLogger('Ingestor')
 
-    def __init__(self, 
-            test_mode=False, force_mode=False, sleep=0, 
-            start_date=None, end_date=None, max_file_age=None, 
-            quick_look_quantity=None, no_edex=False, 
+    def __init__(self,
+            test_mode=False, force_mode=False, sleep=0,
+            start_date=None, end_date=None, max_file_age=None, min_file_age=None,
+            quick_look_quantity=None, no_edex=False,
             qpid_host=None, qpid_port=None, qpid_user=None, qpid_password=None,
             service_manager=None, **kwargs):
 
         self.logger = logging.getLogger('Ingestor')
 
         options = locals().copy()
+        # print options
         options.update(kwargs)
         options.pop('self')
 
         set_options(self, (
-                'test_mode', 'force_mode', 'sleep', 
-                'start_date', 'end_date', 'max_file_age', 
-                'quick_look_quantity', 'no_edex', 
-                'qpid_host', 'qpid_port', 'qpid_user', 'qpid_password', 
+                'test_mode', 'force_mode', 'sleep',
+                'start_date', 'end_date', 'max_file_age', 'min_file_age',
+                'quick_look_quantity', 'no_edex',
+                'qpid_host', 'qpid_port', 'qpid_user', 'qpid_password',
                 ),
             options)
         self.queue = deque()
         self.failed_ingestions = []
         self.qpid_senders = {}
 
-        ''' Instantiate a ServiceManager for this Ingestor and start the services if any are not 
-            running. '''
+        """ Instantiate a ServiceManager for this Ingestor and start the services if any are not
+            running. """
         self.service_manager = service_manager or ServiceManager(**options)
         if not self.service_manager.refresh_status():
             self.service_manager.action("start")
@@ -310,7 +314,7 @@ class Ingestor(object):
         return 1, previous_timestamp
 
     def get_qpid_sender(self, route):
-        ''' Connect or retrieve an already connected QPID sender for a specific route.'''
+        """ Connect or retrieve an already connected QPID sender for a specific route."""
         qpid_sender = self.qpid_senders.get(route, None)
         if not qpid_sender:
             qpid_sender = QpidSender(
@@ -322,14 +326,14 @@ class Ingestor(object):
         return qpid_sender
 
     def close_qpid_connections(self):
-        ''' Close all connected QPID senders. '''
+        """ Close all connected QPID senders. """
         for route in self.qpid_senders:
             self.qpid_senders[route].disconnect()
 
     @classmethod
     def process_csv(cls, csv_file):
-        ''' Reads the specified CSV file for mask, route, designator, and source parameters and 
-            loads the Ingestor object's queue with a batch with those matching parameters.'''
+        """ Reads the specified CSV file for mask, route, designator, and source parameters and
+            loads the Ingestor object's queue with a batch with those matching parameters."""
 
         # Parse the deployment number from the file name.
         try:
@@ -356,8 +360,8 @@ class Ingestor(object):
             return False
 
         def commented(row):
-            ''' Check to see if the row is commented out. Any field that starts with # indictes a 
-                comment.'''
+            """ Check to see if the row is commented out. Any field that starts with # indictes a
+                comment."""
             return bool([v for v in row.itervalues() if v and v.startswith("#")])
 
         routes = {}
@@ -378,7 +382,7 @@ class Ingestor(object):
         return [(mask, routes[mask], deployment_number) for mask in routes]
 
     def in_edex_log(self, mask, data_file, uframe_route):
-        ''' Check EDEX logs to see if the file has been ingested by EDEX.'''
+        """ Check EDEX logs to see if the file has been ingested by EDEX."""
         return bool(pipe(
                 pipe.grep(
                     "%s.*%s" % (uframe_route, mask.replace("*", ".*")), 
@@ -391,8 +395,8 @@ class Ingestor(object):
             )[1])
 
     def load_queue(self, mask, routes, deployment_number):
-        ''' Finds the files that match the filename_mask parameter and loads them into the 
-            Ingestor object's queue. '''
+        """ Finds the files that match the filename_mask parameter and loads them into the
+            Ingestor object's queue. """
 
         # Get a list of files that match the file mask and log the list size.
         data_files = sorted(glob(mask))
@@ -434,18 +438,26 @@ class Ingestor(object):
                 f for f in data_files
                 if datetime.fromtimestamp(os.path.getmtime(f)) < self.end_date]
 
-        # If a maximum file age is set, only ingest files that fall within that age.
+        # Only ingest files younger than max file age
         if self.max_file_age:
             self.logger.info(
-                "Maximum file age set to %s seconds, filtering file list." % (self.max_file_age))
-            current_time = datetime.now()
-            age = timedelta(seconds=self.max_file_age)
+                "Maximum file age set to %s seconds, filtering file list.", self.max_file_age)
+            now = time.time()
             data_files = [
                 f for f in data_files
-                if current_time - datetime.fromtimestamp(os.path.getmtime(f)) < age]
+                if now - os.path.getmtime(f) < self.max_file_age]
 
-        ''' Check if the data_file has previously been ingested. If it has, then skip it, unless 
-            force mode (-f) is active. '''
+        # Only ingest files older than min file age
+        if self.min_file_age:
+            self.logger.info(
+                "Minimum file age set to %s seconds, filtering file list.", self.min_file_age)
+            now = time.time()
+            data_files = [
+                f for f in data_files
+                if now - os.path.getmtime(f) > self.min_file_age]
+
+        """ Check if the data_file has previously been ingested. If it has, then skip it, unless
+            force mode (-f) is active. """
         filtered_data_files = []
         if self.force_mode:
             # If force mode is active, add all data files to the queue with the respective routes.
@@ -484,8 +496,8 @@ class Ingestor(object):
                 if len(valid_routes) > 0:
                     filtered_data_files.append((data_file, valid_routes))
 
-                ''' If a quick look quantity is set (either through the config.yml or the 
-                    command-line argument), exit the loop once the quick look quantity is met. '''
+                """ If a quick look quantity is set (either through the config.yml or the
+                    command-line argument), exit the loop once the quick look quantity is met. """
                 if self.quick_look_quantity and self.quick_look_quantity == len(filtered_data_files):
                     self.logger.info(
                         "%s of %s file(s) from %s set for quick look ingestion." % (
@@ -502,14 +514,14 @@ class Ingestor(object):
             return False
 
         self.queue.append({
-            "mask": mask, 
-            "files": filtered_data_files, 
+            "mask": mask,
+            "files": filtered_data_files,
             'deployment_number': deployment_number
             })
 
-    def ingest_from_queue(self, use_billiard=True):
-        ''' Call the ingestion command for each batch of files in the Ingestor object's queue, 
-            using multiple processes to concurrently send batches. '''
+    def ingest_from_queue(self, use_billiard=False):
+        """ Call the ingestion command for each batch of files in the Ingestor object's queue,
+            using multiple processes to concurrently send batches. """
         max_jobs, max_jobs_last_updated = self.update_max_jobs(1, datetime.now())
 
         self.logger.info('')
@@ -548,16 +560,16 @@ class Ingestor(object):
         self.logger.info("All batches completed.")
 
     def send(self, files, deployment_number):
-        ''' Calls UFrame's ingest sender application with the appropriate command-line arguments 
-            for all files specified in the files list. '''
+        """ Calls UFrame's ingest sender application with the appropriate command-line arguments
+            for all files specified in the files list. """
 
         # Define some helper methods.
         def annotate_parameters(filename, route, designator, source):
-            ''' Turn the ingestion parameters into a dictionary with descriptive keys.'''
+            """ Turn the ingestion parameters into a dictionary with descriptive keys."""
             return {
-                'filename_mask': filename, 
-                'uframe_route': route, 
-                'reference_designator': designator, 
+                'filename_mask': filename,
+                'uframe_route': route,
+                'reference_designator': designator,
                 'data_source': source,
                 }
 
@@ -604,7 +616,7 @@ class Ingestor(object):
         return True
 
     def write_failures_to_csv(self, label):
-        ''' Write any failed ingestions out into a CSV file that can be re-ingested later. '''
+        """ Write any failed ingestions out into a CSV file that can be re-ingested later. """
 
         date_string = datetime.today().strftime('%Y_%m_%d')
         fieldnames = [
